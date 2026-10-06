@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading P&L Performance</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="toolbar">
+    <button id="downloadBtn" type="button">Download as PNG</button>
+  </div>
+
+  <main id="report" class="report">
+    <header class="header">
+      <h1>TRADING P&amp;L PERFORMANCE</h1>
+      <p>July – October | Numerical performance summary</p>
+    </header>
+
+    <section class="hero">
+      <div class="hero-label">FINAL TOTAL P&amp;L</div>
+      <div class="hero-value">+$5,550</div>
+      <div class="hero-subtitle">Cumulative net result</div>
+    </section>
+
+    <section class="section">
+      <h2>P&amp;L breakdown</h2>
+      <table class="breakdown">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Gross P&amp;L</th>
+            <th>Previous P&amp;L</th>
+            <th>Net / Final P&amp;L</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>July → August</td>
+            <td>+$3,320</td>
+            <td>$0</td>
+            <td>+$3,320</td>
+            <td>+$3,320</td>
+          </tr>
+          <tr>
+            <td>August → September</td>
+            <td>−$925</td>
+            <td>$0</td>
+            <td>−$925</td>
+            <td>−$4,245</td>
+          </tr>
+          <tr>
+            <td>September → October</td>
+            <td>+$6,475</td>
+            <td>−$925</td>
+            <td>+$5,550</td>
+            <td>+$6,475</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>Key figures</h2>
+      <div class="key-grid">
+        <div class="key-card">
+          <div class="key-label">July–August</div>
+          <div class="key-value">+$3,320</div>
+        </div>
+        <div class="key-card">
+          <div class="key-label">August–September</div>
+          <div class="key-value">−$925</div>
+        </div>
+        <div class="key-card">
+          <div class="key-label">Gross Sept–Oct</div>
+          <div class="key-value">+$6,475</div>
+        </div>
+        <div class="key-card">
+          <div class="key-label">Final total</div>
+          <div class="key-value">+$5,550</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reconciliation-section">
+      <h2>Final P&amp;L reconciliation</h2>
+      <div class="reconciliation">
+        <div class="recon-row">
+          <span>September → October gross</span>
+          <strong>+$6,475</strong>
+        </div>
+        <div class="recon-row">
+          <span>Less: August → September loss</span>
+          <strong>−$925</strong>
+        </div>
+        <div class="recon-row final">
+          <span>FINAL P&amp;L</span>
+          <strong>+$5,550</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="section important-section">
+      <h2>Important figures only</h2>
+      <div class="important-grid">
+        <div class="important-card">
+          <div class="important-label">FINAL NET P&amp;L</div>
+          <div class="important-value">+$5,550</div>
+        </div>
+        <div class="important-card">
+          <div class="important-label">TOTAL PERIODS</div>
+          <div class="important-value">3</div>
+        </div>
+        <div class="important-card">
+          <div class="important-label">LARGEST GROSS GAIN</div>
+          <div class="important-value">+$6,475</div>
+        </div>
+        <div class="important-card">
+          <div class="important-label">LARGEST LOSS</div>
+          <div class="important-value">−$925</div>
+        </div>
+      </div>
+
+      <p class="note">
+        Note: The +$3,320 July–August result is historical progression and is not added again to the final +$5,550.
+        The −$925 loss is already incorporated into the September–October calculation.
+      </p>
+    </section>
+
+    <footer class="footer">
+      <span>Trading P&amp;L numerical report</span>
+      <span>Page 1</span>
+    </footer>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
