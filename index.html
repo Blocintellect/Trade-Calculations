@@ -8,7 +8,7 @@
   <!-- html2pdf Library for Professional PDF Statements -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
-<body>
+<body class="dark-theme">
   <div class="app">
     <!-- Header / Topbar -->
     <header class="topbar">
@@ -18,6 +18,9 @@
         <p class="subtitle">Live active positions tracking, trade fill history, and professional statement export.</p>
       </div>
       <div class="header-right">
+        <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Theme">
+          <span id="themeIcon">☀️</span> <span id="themeLabel">Light Mode</span>
+        </button>
         <div class="security-tag"><span class="icon">🔒</span> PUBLIC ADDRESS READ-ONLY</div>
       </div>
     </header>
@@ -43,6 +46,7 @@
         <div class="preset-btns">
           <button id="allBtn" class="secondary active">All (30D)</button>
           <button id="monthBtn" class="secondary">This Month</button>
+          <button id="ytdBtn" class="secondary">Year to Date</button>
           <button id="todayBtn" class="secondary">Today</button>
         </div>
         <div class="main-btns">
@@ -139,10 +143,15 @@
           <h2>Trade Executions</h2>
           <p id="tableMeta" class="meta-info">No trade data loaded.</p>
         </div>
-        <div class="export-actions">
-          <button id="pdfBtn" class="btn-export pdf-export" disabled>PDF Statement</button>
-          <button id="csvBtn" class="btn-export" disabled>Export CSV</button>
-          <button id="jsonBtn" class="btn-export" disabled>Export JSON</button>
+        <div class="filter-export-container">
+          <label class="filter-checkbox-label">
+            <input type="checkbox" id="pnlFilterCheckbox"> Show only Closed P&L > $0
+          </label>
+          <div class="export-actions">
+            <button id="pdfBtn" class="btn-export pdf-export" disabled>PDF Statement</button>
+            <button id="csvBtn" class="btn-export" disabled>Export CSV</button>
+            <button id="jsonBtn" class="btn-export" disabled>Export JSON</button>
+          </div>
         </div>
       </div>
       <div class="table-wrap">

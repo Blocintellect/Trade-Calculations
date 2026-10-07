@@ -21,10 +21,55 @@ const walletEl = $("wallet"),
       posBadge = $("posBadge"),
       allBtn = $("allBtn"),
       monthBtn = $("monthBtn"),
-      todayBtn = $("todayBtn");
+      ytdBtn = $("ytdBtn"),
+      todayBtn = $("todayBtn"),
+      pnlFilterCheckbox = $("pnlFilterCheckbox"),
+      themeToggleBtn = $("themeToggleBtn"),
+      themeIcon = $("themeIcon"),
+      themeLabel = $("themeLabel");
 
 let fills = [];
 let activePositions = [];
+
+// Local Storage for Wallet Address
+const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
+const SAVED_THEME_KEY = "hyperliquid_theme";
+
+if (localStorage.getItem(SAVED_WALLET_KEY)) {
+  walletEl.value = localStorage.getItem(SAVED_WALLET_KEY);
+}
+
+walletEl.addEventListener("input", () => {
+  localStorage.setItem(SAVED_WALLET_KEY, walletEl.value.trim());
+});
+
+// Theme Management
+function initTheme() {
+  const currentTheme = localStorage.getItem(SAVED_THEME_KEY) || "dark";
+  applyTheme(currentTheme);
+}
+
+function applyTheme(theme) {
+  if (theme === "light") {
+    document.body.classList.remove("dark-theme");
+    document.body.classList.add("light-theme");
+    themeIcon.textContent = "🌙";
+    themeLabel.textContent = "Dark Mode";
+  } else {
+    document.body.classList.remove("light-theme");
+    document.body.classList.add("dark-theme");
+    themeIcon.textContent = "☀️";
+    themeLabel.textContent = "Light Mode";
+  }
+  localStorage.setItem(SAVED_THEME_KEY, theme);
+}
+
+themeToggleBtn.addEventListener("click", () => {
+  const isLight = document.body.classList.contains("light-theme");
+  applyTheme(isLight ? "dark" : "light");
+});
+
+initTheme();
 
 // Dynamic Date Formatter (YYYY-MM-DD)
 function formatDateInput(d) {
@@ -39,7 +84,7 @@ function setPreset(k) {
   const e = new Date(n);
   let s = new Date(n);
 
-  [allBtn, monthBtn, todayBtn].forEach(b => b && b.classList.remove("active"));
+  [allBtn, monthBtn, ytdBtn, todayBtn].forEach(b => b && b.classList.remove("active"));
 
   if (k === "today") {
     s = new Date(n.getFullYear(), n.getMonth(), n.getDate());
@@ -47,6 +92,9 @@ function setPreset(k) {
   } else if (k === "month") {
     s = new Date(n.getFullYear(), n.getMonth(), 1);
     if (monthBtn) monthBtn.classList.add("active");
+  } else if (k === "ytd") {
+    s = new Date(n.getFullYear(), 0, 1);
+    if (ytdBtn) ytdBtn.classList.add("active");
   } else {
     // Default: Last 30 Days
     s.setDate(s.getDate() - 30);
@@ -57,7 +105,6 @@ function setPreset(k) {
   endEl.value = formatDateInput(e);
 }
 
-// Initial Preset
 setPreset("30");
 
 // Tab Navigation
@@ -100,52 +147,48 @@ async function postInfo(body) {
   return r.json();
 }
 
-// Fixed Active Positions Fetcher
+// Fixed Live Active Positions Fetcher
 async function fetchActivePositions(user) {
   const cleanUser = user.toLowerCase().trim();
   const active = [];
 
   try {
-    const [perpState, spotState, vaultDetails] = await Promise.all([
+    const [perpState, spotState] = await Promise.all([
       postInfo({ type: "clearinghouseState", user: cleanUser }).catch(() => null),
-      postInfo({ type: "spotClearinghouseState", user: cleanUser }).catch(() => null),
-      postInfo({ type: "vaultDetails", vaultAddress: cleanUser, user: cleanUser }).catch(() => null)
+      postInfo({ type: "spotClearinghouseState", user: cleanUser }).catch(() => null)
     ]);
 
-    const parseAssetPositions = (assetPositions, typePrefix = "") => {
-      if (!Array.isArray(assetPositions)) return;
-      for (const item of assetPositions) {
-        const p = item?.position || item;
+    // Parse Perpetual Open Positions
+    if (perpState && Array.isArray(perpState.assetPositions)) {
+      for (const item of perpState.assetPositions) {
+        const p = item?.position;
         if (!p) continue;
 
         const size = Number(p.szi || 0);
         if (Math.abs(size) > 0.000001) {
+          const positionValue = Number(p.positionValue || 0);
+          const entryPx = Number(p.entryPx || 0);
+          const markPx = Math.abs(size) > 0 && positionValue > 0 ? positionValue / Math.abs(size) : entryPx;
+          const unrealizedPnl = Number(p.unrealizedPnl || 0);
+          const marginUsed = Number(p.marginUsed || 0);
+          const liquidationPx = p.liquidationPx ? Number(p.liquidationPx) : 0;
+
           active.push({
-            coin: p.coin + (typePrefix ? ` (${typePrefix})` : ""),
+            coin: p.coin,
             szi: size,
-            entryPx: Number(p.entryPx || 0),
-            positionValue: Number(p.positionValue || 0),
-            unrealizedPnl: Number(p.unrealizedPnl || 0),
-            marginUsed: Number(p.marginUsed || 0),
-            liquidationPx: p.liquidationPx ? Number(p.liquidationPx) : 0,
+            entryPx,
+            markPx,
+            positionValue,
+            unrealizedPnl,
+            marginUsed,
+            liquidationPx,
             type: "PERP"
           });
         }
       }
-    };
-
-    // Primary Perps
-    if (perpState) parseAssetPositions(perpState.assetPositions);
-
-    // Vaults
-    if (vaultDetails && vaultDetails.portfolio) {
-      const vState = vaultDetails.portfolio.at(-1);
-      if (vState && vState.assetPositions) {
-        parseAssetPositions(vState.assetPositions, "Vault");
-      }
     }
 
-    // Spot Balances
+    // Parse Spot Balances
     if (spotState && Array.isArray(spotState.balances)) {
       for (const b of spotState.balances) {
         const total = Number(b.total || 0);
@@ -157,6 +200,7 @@ async function fetchActivePositions(user) {
             coin: b.coin,
             szi: netSize,
             entryPx: Number(b.entryNtl || 0) / (netSize || 1),
+            markPx: Number(b.entryNtl || 0) / (netSize || 1),
             positionValue: Number(b.entryNtl || 0),
             unrealizedPnl: 0,
             marginUsed: 0,
@@ -286,7 +330,7 @@ function renderPositions() {
     const sz = p.szi;
     const side = p.type === "SPOT" ? "SPOT" : (sz > 0 ? "LONG" : "SHORT");
     const entryPx = p.entryPx;
-    const markPx = (p.positionValue && Math.abs(sz) > 0) ? p.positionValue / Math.abs(sz) : entryPx;
+    const markPx = p.markPx;
     const unrealizedPnl = p.unrealizedPnl;
     const margin = p.marginUsed;
     const roe = margin > 0 ? (unrealizedPnl / margin) * 100 : 0;
@@ -319,19 +363,28 @@ function renderPositions() {
   updateCombinedMetrics();
 }
 
+function getFilteredFills() {
+  if (pnlFilterCheckbox.checked) {
+    return fills.filter(f => num(f.closedPnl) > 0);
+  }
+  return fills;
+}
+
 function renderTrades() {
-  if (!fills.length) {
-    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">No trade fills found in range.</td></tr>';
-    tableMeta.textContent = "No data loaded.";
+  const displayFills = getFilteredFills();
+
+  if (!displayFills.length) {
+    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">No trade fills found matching criteria.</td></tr>';
+    tableMeta.textContent = "No trade fills to show.";
     return;
   }
 
-  const vol = fills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
+  const vol = displayFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
-  setMetric("mFills", fills.length.toLocaleString());
+  setMetric("mFills", displayFills.length.toLocaleString());
   setMetric("mVolume", plainMoney(vol, 2));
 
-  bodyEl.innerHTML = fills.map(f => {
+  bodyEl.innerHTML = displayFills.map(f => {
     const p = num(f.closedPnl);
     const d = String(f.dir ?? "");
     const dc = d.toLowerCase().includes("close") ? "dir-close" : "dir-open";
@@ -353,7 +406,7 @@ function renderTrades() {
     </tr>`;
   }).join("");
 
-  tableMeta.textContent = `${fills.length.toLocaleString()} fills • ${formatDate(fills.at(-1).time)} → ${formatDate(fills[0].time)}`;
+  tableMeta.textContent = `${displayFills.length.toLocaleString()} fills shown • ${formatDate(displayFills.at(-1).time)} → ${formatDate(displayFills[0].time)}`;
   
   csvBtn.disabled = false;
   jsonBtn.disabled = false;
@@ -361,6 +414,8 @@ function renderTrades() {
 
   updateCombinedMetrics();
 }
+
+pnlFilterCheckbox.addEventListener("change", renderTrades);
 
 fetchBtn.addEventListener("click", async () => {
   clearStatus();
@@ -453,22 +508,33 @@ function downloadBlob(content, name, type) {
 }
 
 csvBtn.addEventListener("click", () => {
-  if (fills.length) downloadBlob(toCSV(fills), `hyperliquid-trades-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+  const targetFills = getFilteredFills();
+  if (targetFills.length) {
+    const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
+    downloadBlob(toCSV(targetFills), `hyperliquid-trades${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+  }
 });
 
 jsonBtn.addEventListener("click", () => {
-  if (fills.length) downloadBlob(JSON.stringify({ activePositions, fills }, null, 2), `hyperliquid-portfolio-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
+  const targetFills = getFilteredFills();
+  if (targetFills.length) {
+    const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
+    downloadBlob(JSON.stringify({ activePositions, fills: targetFills }, null, 2), `hyperliquid-portfolio${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
+  }
 });
 
 todayBtn.addEventListener("click", () => setPreset("today"));
 monthBtn.addEventListener("click", () => setPreset("month"));
+ytdBtn.addEventListener("click", () => setPreset("ytd"));
 allBtn.addEventListener("click", () => setPreset("30"));
 
 $("clearBtn").addEventListener("click", () => {
   walletEl.value = "";
+  localStorage.removeItem(SAVED_WALLET_KEY);
   setPreset("30");
   fills = [];
   activePositions = [];
+  pnlFilterCheckbox.checked = false;
   clearStatus();
   noticeEl.classList.add("hidden");
   bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">Enter a valid wallet address to display trade history.</td></tr>';
