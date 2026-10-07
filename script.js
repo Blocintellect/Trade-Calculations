@@ -1,4 +1,5 @@
 const API = "https://api.hyperliquid.xyz/info";
+const EXPLORER_URL = "https://app.hyperliquid.xyz/explorer/tx/";
 const $ = id => document.getElementById(id);
 
 const walletEl = $("wallet"),
@@ -42,6 +43,15 @@ if (localStorage.getItem(SAVED_WALLET_KEY)) {
 walletEl.addEventListener("input", () => {
   localStorage.setItem(SAVED_WALLET_KEY, walletEl.value.trim());
 });
+
+// Helper Function: Map B -> Buy, A -> Sell
+function mapSide(side) {
+  if (!side) return "";
+  const s = String(side).toUpperCase();
+  if (s === "B") return "Buy";
+  if (s === "A") return "Sell";
+  return side;
+}
 
 // Theme Management
 function initTheme() {
@@ -147,7 +157,7 @@ async function postInfo(body) {
   return r.json();
 }
 
-// Fixed Live Active Positions Fetcher
+// Live Active Positions Fetcher
 async function fetchActivePositions(user) {
   const cleanUser = user.toLowerCase().trim();
   const active = [];
@@ -388,12 +398,19 @@ function renderTrades() {
     const p = num(f.closedPnl);
     const d = String(f.dir ?? "");
     const dc = d.toLowerCase().includes("close") ? "dir-close" : "dir-open";
+    const rawHash = String(f.hash ?? "");
+    const hasHash = rawHash && rawHash !== "null" && rawHash !== "undefined";
+
+    // Clickable Explorer Link for Hash
+    const hashCell = hasHash 
+      ? `<a href="${EXPLORER_URL}${esc(rawHash)}" target="_blank" rel="noopener noreferrer" class="hash" title="View on Hyperliquid Explorer: ${esc(rawHash)}">${esc(rawHash)}</a>`
+      : '—';
 
     return `<tr>
       <td>${esc(formatDate(f.time))}</td>
       <td class="coin-name">${esc(f.coin)}</td>
       <td class="${dc}">${esc(d)}</td>
-      <td>${esc(f.side)}</td>
+      <td>${esc(mapSide(f.side))}</td>
       <td>${esc(f.px)}</td>
       <td>${esc(f.sz)}</td>
       <td>${plainMoney(Math.abs(num(f.px) * num(f.sz)), 2)}</td>
@@ -402,7 +419,7 @@ function renderTrades() {
       <td>${esc(f.feeToken)}</td>
       <td>${esc(f.oid)}</td>
       <td>${esc(f.tid)}</td>
-      <td><span class="hash" title="${esc(f.hash)}">${esc(f.hash)}</span></td>
+      <td>${hashCell}</td>
     </tr>`;
   }).join("");
 
@@ -481,7 +498,7 @@ function toCSV(rows) {
     ["Local Date/Time", f => formatDate(f.time)],
     ["Coin", f => f.coin],
     ["Direction", f => f.dir],
-    ["Side", f => f.side],
+    ["Side", f => mapSide(f.side)],
     ["Price", f => f.px],
     ["Size", f => f.sz],
     ["Notional USD", f => Math.abs(num(f.px) * num(f.sz)).toFixed(8)],
@@ -519,7 +536,8 @@ jsonBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
     const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
-    downloadBlob(JSON.stringify({ activePositions, fills: targetFills }, null, 2), `hyperliquid-portfolio${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
+    const mappedFills = targetFills.map(f => ({ ...f, sideFormatted: mapSide(f.side) }));
+    downloadBlob(JSON.stringify({ activePositions, fills: mappedFills }, null, 2), `hyperliquid-portfolio${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
   }
 });
 
