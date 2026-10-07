@@ -157,7 +157,7 @@ async function postInfo(body) {
   return r.json();
 }
 
-// Live Active Positions Fetcher
+// Robust Live Active Positions Fetcher
 async function fetchActivePositions(user) {
   const cleanUser = user.toLowerCase().trim();
   const active = [];
@@ -168,19 +168,23 @@ async function fetchActivePositions(user) {
       postInfo({ type: "spotClearinghouseState", user: cleanUser }).catch(() => null)
     ]);
 
-    // Parse Perpetual Open Positions
-    if (perpState && Array.isArray(perpState.assetPositions)) {
-      for (const item of perpState.assetPositions) {
-        const p = item?.position;
+    console.log("Perp State Received:", perpState);
+    console.log("Spot State Received:", spotState);
+
+    // 1. Parse Perpetual Open Positions
+    if (perpState) {
+      const posArray = perpState.assetPositions || perpState.positions || [];
+      for (const item of posArray) {
+        const p = item?.position || item;
         if (!p) continue;
 
-        const size = Number(p.szi || 0);
+        const size = Number(p.szi || p.size || 0);
         if (Math.abs(size) > 0.000001) {
-          const positionValue = Number(p.positionValue || 0);
+          const positionValue = Number(p.positionValue || p.notional || 0);
           const entryPx = Number(p.entryPx || 0);
           const markPx = Math.abs(size) > 0 && positionValue > 0 ? positionValue / Math.abs(size) : entryPx;
           const unrealizedPnl = Number(p.unrealizedPnl || 0);
-          const marginUsed = Number(p.marginUsed || 0);
+          const marginUsed = Number(p.marginUsed || p.margin || 0);
           const liquidationPx = p.liquidationPx ? Number(p.liquidationPx) : 0;
 
           active.push({
@@ -198,7 +202,7 @@ async function fetchActivePositions(user) {
       }
     }
 
-    // Parse Spot Balances
+    // 2. Parse Spot Balances
     if (spotState && Array.isArray(spotState.balances)) {
       for (const b of spotState.balances) {
         const total = Number(b.total || 0);
@@ -401,7 +405,6 @@ function renderTrades() {
     const rawHash = String(f.hash ?? "");
     const hasHash = rawHash && rawHash !== "null" && rawHash !== "undefined";
 
-    // Clickable Explorer Link for Hash
     const hashCell = hasHash 
       ? `<a href="${EXPLORER_URL}${esc(rawHash)}" target="_blank" rel="noopener noreferrer" class="hash" title="View on Hyperliquid Explorer: ${esc(rawHash)}">${esc(rawHash)}</a>`
       : '—';
