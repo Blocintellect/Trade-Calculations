@@ -24,7 +24,7 @@ const walletEl = $("wallet"),
 
 let fills = [];
 
-// Local Storage for Wallet Address & Theme
+// Local Storage Keys
 const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
 const SAVED_THEME_KEY = "hyperliquid_theme";
 
@@ -36,7 +36,7 @@ walletEl.addEventListener("input", () => {
   localStorage.setItem(SAVED_WALLET_KEY, walletEl.value.trim());
 });
 
-// Helper Function: Map B -> Buy, A -> Sell
+// Map side code (B -> Buy, A -> Sell)
 function mapSide(side) {
   if (!side) return "";
   const s = String(side).toUpperCase();
@@ -73,7 +73,6 @@ themeToggleBtn.addEventListener("click", () => {
 
 initTheme();
 
-// Dynamic Date Formatter (YYYY-MM-DD)
 function formatDateInput(d) {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -98,7 +97,6 @@ function setPreset(k) {
     s = new Date(n.getFullYear(), 0, 1);
     if (ytdBtn) ytdBtn.classList.add("active");
   } else {
-    // Default: Last 30 Days
     s.setDate(s.getDate() - 30);
     if (allBtn) allBtn.classList.add("active");
   }
@@ -134,7 +132,7 @@ async function postInfo(body) {
   return r.json();
 }
 
-// Fetch Trade Fills by Window
+// Fetch Trades
 async function fetchFillsByTime(user, startMs, endMs) {
   const cleanUser = user.toLowerCase().trim();
   const out = [], seen = new Set(), week = 7 * 86400000;
@@ -229,7 +227,6 @@ function updateMetrics() {
   setMetric("mNet", money(netPnl, 2), netPnl);
 }
 
-// Dropdown Filter Selection Logic
 function getFilteredFills() {
   const filterVal = pnlFilterSelect.value;
   if (filterVal === "positive") {
@@ -377,7 +374,6 @@ function downloadBlob(content, name, type) {
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
 
-// Filtered CSV Export
 csvBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
@@ -386,7 +382,6 @@ csvBtn.addEventListener("click", () => {
   }
 });
 
-// Filtered JSON Export
 jsonBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
@@ -396,13 +391,13 @@ jsonBtn.addEventListener("click", () => {
   }
 });
 
-// Multi-Page PDF Generator
-async function generatePDF() {
+// Native AutoTable PDF Generator (Fixes cut-off and split lines)
+function generatePDF() {
   const targetFills = getFilteredFills();
   if (!targetFills.length) return;
 
-  if (typeof html2canvas === "undefined" || typeof window.jspdf === "undefined") {
-    alert("PDF generator libraries are still loading. Please retry in a moment.");
+  if (typeof window.jspdf === "undefined" || typeof window.jspdf.jsPDF === "undefined") {
+    alert("PDF generator library is still loading. Please retry in a moment.");
     return;
   }
 
@@ -410,130 +405,134 @@ async function generatePDF() {
   pdfBtn.textContent = "Generating...";
 
   try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("landscape", "pt", "a4");
+
     const wallet = walletEl.value.trim();
     const filterLabel = pnlFilterSelect.options[pnlFilterSelect.selectedIndex].text;
     const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
     const totalFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
     const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
-    // Chunk trades into pages (25 rows per page to prevent cutoff)
-    const ROWS_PER_PAGE = 25;
-    const totalPages = Math.ceil(targetFills.length / ROWS_PER_PAGE);
+    // Title Section
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(0, 184, 124);
+    doc.text("HYPERLIQUID PRO", 40, 40);
 
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF("landscape", "pt", "a4");
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text("OFFICIAL TRADE AUDIT STATEMENT", 40, 52);
 
-    for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-      const pageFills = targetFills.slice(pageIdx * ROWS_PER_PAGE, (pageIdx + 1) * ROWS_PER_PAGE);
+    // Metadata
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.text(`Account: ${wallet}`, 802, 35, { align: "right" });
+    doc.text(`Period: ${startEl.value} to ${endEl.value}`, 802, 47, { align: "right" });
+    doc.text(`Filter: ${filterLabel}`, 802, 59, { align: "right" });
 
-      const printArea = document.createElement("div");
-      printArea.style.position = "absolute";
-      printArea.style.left = "-9999px";
-      printArea.style.top = "0";
-      printArea.style.width = "1000px";
-      printArea.style.background = "#ffffff";
-      printArea.style.padding = "24px";
-      printArea.style.color = "#111827";
-      printArea.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    // Summary Metric Cards
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
 
-      // Render header and summary cards on Page 1 only
-      const headerSection = pageIdx === 0 ? `
-        <div style="border-bottom: 2px solid #00b87c; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start;">
-          <div>
-            <h2 style="margin: 0; color: #00b87c; font-size: 20px; font-weight: 800;">HYPERLIQUID PRO</h2>
-            <p style="margin: 3px 0 0; color: #4b5563; font-size: 11px; font-weight: 600;">OFFICIAL TRADE AUDIT STATEMENT</p>
-          </div>
-          <div style="text-align: right; font-size: 10px; color: #374151; line-height: 1.4;">
-            <p style="margin: 0;"><strong>Account:</strong> ${esc(wallet)}</p>
-            <p style="margin: 0;"><strong>Period:</strong> ${esc(startEl.value)} to ${esc(endEl.value)}</p>
-            <p style="margin: 0;"><strong>Filter Applied:</strong> ${esc(filterLabel)}</p>
-            <p style="margin: 0;"><strong>Generated:</strong> ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
-          </div>
-        </div>
+    doc.roundedRect(40, 70, 175, 40, 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("TOTAL TRADES", 50, 82);
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(targetFills.length.toLocaleString(), 50, 100);
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
-          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
-            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">TOTAL TRADES</span>
-            <span style="display: block; font-size: 14px; font-weight: 700; color: #111827; margin-top: 2px;">${targetFills.length.toLocaleString()}</span>
-          </div>
-          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
-            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">CLOSED P&L</span>
-            <span style="display: block; font-size: 14px; font-weight: 700; color: ${totalPnl >= 0 ? '#059669' : '#dc2626'}; margin-top: 2px;">${money(totalPnl, 2)}</span>
-          </div>
-          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
-            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">TOTAL FEES</span>
-            <span style="display: block; font-size: 14px; font-weight: 700; color: #111827; margin-top: 2px;">${plainMoney(totalFees, 2)}</span>
-          </div>
-          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
-            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">TOTAL VOLUME</span>
-            <span style="display: block; font-size: 14px; font-weight: 700; color: #111827; margin-top: 2px;">${plainMoney(totalVol, 2)}</span>
-          </div>
-        </div>
-      ` : `
-        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between;">
-          <span style="font-size: 11px; font-weight: 700; color: #00b87c;">HYPERLIQUID PRO — STATEMENT</span>
-          <span style="font-size: 10px; color: #6b7280;">Account: ${esc(wallet)}</span>
-        </div>
-      `;
+    doc.roundedRect(228, 70, 175, 40, 3, 3, "FD");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("CLOSED P&L", 238, 82);
+    doc.setFontSize(11);
+    if (totalPnl >= 0) doc.setTextColor(0, 184, 124);
+    else doc.setTextColor(246, 70, 93);
+    doc.text(money(totalPnl, 2), 238, 100);
 
-      printArea.innerHTML = `
-        ${headerSection}
-        <table style="width: 100%; border-collapse: collapse; font-size: 9px;">
-          <thead>
-            <tr style="background-color: #f3f4f6;">
-              <th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #d1d5db; color: #374151;">Date / Time</th>
-              <th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #d1d5db; color: #374151;">Coin</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Dir</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Side</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Price</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Size</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Notional</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Closed P&L</th>
-              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Fee</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${pageFills.map(f => {
-              const p = num(f.closedPnl);
-              return `<tr style="border-bottom: 1px solid #e5e7eb;">
-                <td style="padding: 5px 8px; text-align: left; color: #1f2937;">${esc(formatDate(f.time))}</td>
-                <td style="padding: 5px 8px; text-align: left; color: #111827; font-weight: 700;">${esc(f.coin)}</td>
-                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(f.dir)}</td>
-                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(mapSide(f.side))}</td>
-                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(f.px)}</td>
-                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(f.sz)}</td>
-                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${plainMoney(Math.abs(num(f.px) * num(f.sz)), 2)}</td>
-                <td style="padding: 5px 8px; text-align: right; font-weight: 700; color: ${p > 0 ? '#059669' : p < 0 ? '#dc2626' : '#111827'};">${money(p, 2)}</td>
-                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${plainMoney(f.fee, 2)}</td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>
+    doc.roundedRect(416, 70, 175, 40, 3, 3, "FD");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("TOTAL FEES", 426, 82);
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(plainMoney(totalFees, 2), 426, 100);
 
-        <div style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 8px; display: flex; justify-content: space-between; font-size: 8px; color: #9ca3af;">
-          <span>Hyperliquid On-Chain Statement</span>
-          <span>Page ${pageIdx + 1} of ${totalPages}</span>
-        </div>
-      `;
+    doc.roundedRect(604, 70, 198, 40, 3, 3, "FD");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("TOTAL VOLUME", 614, 82);
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(plainMoney(totalVol, 2), 614, 100);
 
-      document.body.appendChild(printArea);
+    // Data Mapping for Vector Engine
+    const tableHeaders = [["Date / Time", "Coin", "Dir", "Side", "Price", "Size", "Notional", "Closed P&L", "Fee"]];
+    const tableBody = targetFills.map(f => [
+      formatDate(f.time),
+      f.coin,
+      f.dir ?? "",
+      mapSide(f.side),
+      f.px,
+      f.sz,
+      plainMoney(Math.abs(num(f.px) * num(f.sz)), 2),
+      money(num(f.closedPnl), 2),
+      plainMoney(f.fee, 2)
+    ]);
 
-      const canvas = await html2canvas(printArea, { scale: 2, useCORS: true });
-      document.body.removeChild(printArea);
+    // Draw Vector Table with Page Breaks
+    doc.autoTable({
+      head: tableHeaders,
+      body: tableBody,
+      startY: 125,
+      theme: "grid",
+      margin: { top: 40, bottom: 40, left: 40, right: 40 },
+      styles: {
+        fontSize: 8,
+        cellPadding: 4,
+        overflow: "linebreak",
+        halign: "right"
+      },
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [71, 85, 105],
+        fontStyle: "bold",
+        halign: "right"
+      },
+      columnStyles: {
+        0: { halign: "left" },
+        1: { halign: "left", fontStyle: "bold" }
+      },
+      didParseCell: function (data) {
+        if (data.section === "body" && data.column.index === 7) {
+          const rawText = data.cell.raw;
+          if (rawText.startsWith("+")) {
+            data.cell.styles.textColor = [0, 184, 124];
+            data.cell.styles.fontStyle = "bold";
+          } else if (rawText.startsWith("−") || rawText.startsWith("-")) {
+            data.cell.styles.textColor = [246, 70, 93];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+      didDrawPage: function (data) {
+        const str = `Page ${doc.internal.getNumberOfPages()}`;
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text("Hyperliquid On-Chain Statement", 40, doc.internal.pageSize.height - 20);
+        doc.text(str, 802, doc.internal.pageSize.height - 20, { align: "right" });
+      }
+    });
 
-      const imgData = canvas.toDataURL("image/png");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      if (pageIdx > 0) pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    }
-
-    pdf.save(`statement-${wallet.slice(0, 8)}-${pnlFilterSelect.value}.pdf`);
+    doc.save(`statement-${wallet.slice(0, 8)}-${pnlFilterSelect.value}.pdf`);
 
   } catch (err) {
     console.error("PDF Generation error:", err);
-    alert("Unable to compile PDF statement. Please check console for technical logs.");
+    alert("Unable to compile PDF statement. Check console for technical details.");
   } finally {
     pdfBtn.disabled = false;
     pdfBtn.textContent = "PDF Statement";
