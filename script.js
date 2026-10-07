@@ -9,17 +9,10 @@ const walletEl = $("wallet"),
       statusEl = $("status"),
       noticeEl = $("limitNotice"),
       bodyEl = $("tradeBody"),
-      positionsBodyEl = $("positionsBody"),
       tableMeta = $("tableMeta"),
-      positionsMeta = $("positionsMeta"),
       csvBtn = $("csvBtn"),
       jsonBtn = $("jsonBtn"),
       pdfBtn = $("pdfBtn"),
-      tabPositions = $("tabPositions"),
-      tabTrades = $("tabTrades"),
-      panelPositions = $("panelPositions"),
-      panelTrades = $("panelTrades"),
-      posBadge = $("posBadge"),
       allBtn = $("allBtn"),
       monthBtn = $("monthBtn"),
       ytdBtn = $("ytdBtn"),
@@ -30,9 +23,8 @@ const walletEl = $("wallet"),
       themeLabel = $("themeLabel");
 
 let fills = [];
-let activePositions = [];
 
-// Local Storage for Wallet Address
+// Local Storage for Wallet Address & Theme
 const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
 const SAVED_THEME_KEY = "hyperliquid_theme";
 
@@ -117,21 +109,6 @@ function setPreset(k) {
 
 setPreset("30");
 
-// Tab Navigation
-tabPositions.addEventListener("click", () => {
-  tabPositions.classList.add("active");
-  tabTrades.classList.remove("active");
-  panelPositions.classList.remove("hidden");
-  panelTrades.classList.add("hidden");
-});
-
-tabTrades.addEventListener("click", () => {
-  tabTrades.classList.add("active");
-  tabPositions.classList.remove("active");
-  panelTrades.classList.remove("hidden");
-  panelPositions.classList.add("hidden");
-});
-
 function setStatus(m, t = "") {
   statusEl.textContent = m;
   statusEl.className = "status" + (t ? " " + t : "");
@@ -155,80 +132,6 @@ async function postInfo(body) {
   });
   if (!r.ok) throw new Error(`Hyperliquid API status: ${r.status}`);
   return r.json();
-}
-
-// Robust Live Active Positions Fetcher
-async function fetchActivePositions(user) {
-  const cleanUser = user.toLowerCase().trim();
-  const active = [];
-
-  try {
-    const [perpState, spotState] = await Promise.all([
-      postInfo({ type: "clearinghouseState", user: cleanUser }).catch(() => null),
-      postInfo({ type: "spotClearinghouseState", user: cleanUser }).catch(() => null)
-    ]);
-
-    console.log("Perp State Received:", perpState);
-    console.log("Spot State Received:", spotState);
-
-    // 1. Parse Perpetual Open Positions
-    if (perpState) {
-      const posArray = perpState.assetPositions || perpState.positions || [];
-      for (const item of posArray) {
-        const p = item?.position || item;
-        if (!p) continue;
-
-        const size = Number(p.szi || p.size || 0);
-        if (Math.abs(size) > 0.000001) {
-          const positionValue = Number(p.positionValue || p.notional || 0);
-          const entryPx = Number(p.entryPx || 0);
-          const markPx = Math.abs(size) > 0 && positionValue > 0 ? positionValue / Math.abs(size) : entryPx;
-          const unrealizedPnl = Number(p.unrealizedPnl || 0);
-          const marginUsed = Number(p.marginUsed || p.margin || 0);
-          const liquidationPx = p.liquidationPx ? Number(p.liquidationPx) : 0;
-
-          active.push({
-            coin: p.coin,
-            szi: size,
-            entryPx,
-            markPx,
-            positionValue,
-            unrealizedPnl,
-            marginUsed,
-            liquidationPx,
-            type: "PERP"
-          });
-        }
-      }
-    }
-
-    // 2. Parse Spot Balances
-    if (spotState && Array.isArray(spotState.balances)) {
-      for (const b of spotState.balances) {
-        const total = Number(b.total || 0);
-        const hold = Number(b.hold || 0);
-        const netSize = total + hold;
-
-        if (netSize > 0.000001 && b.coin !== "USDC") {
-          active.push({
-            coin: b.coin,
-            szi: netSize,
-            entryPx: Number(b.entryNtl || 0) / (netSize || 1),
-            markPx: Number(b.entryNtl || 0) / (netSize || 1),
-            positionValue: Number(b.entryNtl || 0),
-            unrealizedPnl: 0,
-            marginUsed: 0,
-            liquidationPx: 0,
-            type: "SPOT"
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Error fetching active positions:", err);
-  }
-
-  return active;
 }
 
 // Fetch Trade Fills by Window
@@ -308,73 +211,22 @@ function setMetric(id, value, s = null) {
 }
 
 function resetMetrics() {
-  ["mFills", "mPnl", "mFees", "mNet", "mUnrealizedPnl", "mVolume"].forEach(id => {
+  ["mFills", "mPnl", "mFees", "mNet", "mVolume"].forEach(id => {
     setMetric(id, "—");
   });
   csvBtn.disabled = true;
   jsonBtn.disabled = true;
   pdfBtn.disabled = true;
-  posBadge.textContent = "0";
 }
 
-function updateCombinedMetrics() {
+function updateMetrics() {
   const closedPnl = fills.reduce((s, f) => s + num(f.closedPnl), 0);
   const fees = fills.reduce((s, f) => s + num(f.fee), 0);
-  const unrealizedPnl = activePositions.reduce((s, p) => s + num(p.unrealizedPnl), 0);
-  const netPnl = closedPnl - fees + unrealizedPnl;
+  const netPnl = closedPnl - fees;
 
   setMetric("mPnl", money(closedPnl, 2), closedPnl);
   setMetric("mFees", plainMoney(fees, 2));
-  setMetric("mUnrealizedPnl", money(unrealizedPnl, 2), unrealizedPnl);
   setMetric("mNet", money(netPnl, 2), netPnl);
-}
-
-function renderPositions() {
-  posBadge.textContent = activePositions.length.toString();
-
-  if (!activePositions.length) {
-    positionsBodyEl.innerHTML = '<tr class="empty-row"><td colspan="9">No active open positions found for this account.</td></tr>';
-    positionsMeta.textContent = "0 active open positions.";
-    return;
-  }
-
-  let totalUnrealized = 0;
-
-  positionsBodyEl.innerHTML = activePositions.map(p => {
-    const sz = p.szi;
-    const side = p.type === "SPOT" ? "SPOT" : (sz > 0 ? "LONG" : "SHORT");
-    const entryPx = p.entryPx;
-    const markPx = p.markPx;
-    const unrealizedPnl = p.unrealizedPnl;
-    const margin = p.marginUsed;
-    const roe = margin > 0 ? (unrealizedPnl / margin) * 100 : 0;
-    const liqPx = p.liquidationPx;
-
-    totalUnrealized += unrealizedPnl;
-
-    const sideBadge = side === "LONG" 
-      ? '<span class="badge-long">LONG</span>' 
-      : side === "SHORT" 
-        ? '<span class="badge-short">SHORT</span>' 
-        : '<span class="badge-long" style="background:#1e293b;color:#38bdf8;border-color:#0284c7;">SPOT</span>';
-
-    const pnlClass = unrealizedPnl > 0 ? "text-positive" : unrealizedPnl < 0 ? "text-negative" : "";
-
-    return `<tr>
-      <td class="coin-name">${esc(p.coin)}</td>
-      <td>${sideBadge}</td>
-      <td>${esc(Math.abs(sz))}</td>
-      <td>${entryPx > 0 ? plainMoney(entryPx, 4) : "—"}</td>
-      <td>${plainMoney(markPx, 4)}</td>
-      <td>${liqPx > 0 ? plainMoney(liqPx, 4) : "—"}</td>
-      <td>${margin > 0 ? plainMoney(margin, 2) : "—"}</td>
-      <td class="${pnlClass}">${money(unrealizedPnl, 2)}</td>
-      <td class="${pnlClass}">${roe !== 0 ? roe.toFixed(2) + "%" : "—"}</td>
-    </tr>`;
-  }).join("");
-
-  positionsMeta.textContent = `${activePositions.length} active position(s) • Total Unrealized P&L: ${money(totalUnrealized, 2)}`;
-  updateCombinedMetrics();
 }
 
 function getFilteredFills() {
@@ -432,7 +284,7 @@ function renderTrades() {
   jsonBtn.disabled = false;
   pdfBtn.disabled = false;
 
-  updateCombinedMetrics();
+  updateMetrics();
 }
 
 pnlFilterCheckbox.addEventListener("change", renderTrades);
@@ -459,21 +311,14 @@ fetchBtn.addEventListener("click", async () => {
 
   fetchBtn.disabled = true;
   fills = [];
-  activePositions = [];
   resetMetrics();
 
   try {
-    setStatus("Fetching active positions & trade history from Hyperliquid…");
+    setStatus("Fetching trade statement history from Hyperliquid…");
 
-    const [positionsRes, fillsRes] = await Promise.all([
-      fetchActivePositions(wallet),
-      fetchFillsByTime(wallet, s, e)
-    ]);
-
-    activePositions = positionsRes;
+    const fillsRes = await fetchFillsByTime(wallet, s, e);
     fills = fillsRes.result;
 
-    renderPositions();
     renderTrades();
 
     if (fillsRes.reachedGlobalLimit) {
@@ -481,7 +326,7 @@ fetchBtn.addEventListener("click", async () => {
       noticeEl.classList.remove("hidden");
     }
 
-    setStatus(`Loaded ${activePositions.length} active position(s) & ${fills.length.toLocaleString()} trade fill(s).`, "success");
+    setStatus(`Loaded ${fills.length.toLocaleString()} trade fill(s).`, "success");
   } catch (err) {
     console.error(err);
     setStatus("Error fetching data: " + (err?.message || "Check network connection or wallet address."), "error");
@@ -531,7 +376,7 @@ csvBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
     const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
-    downloadBlob(toCSV(targetFills), `hyperliquid-trades${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    downloadBlob(toCSV(targetFills), `hyperliquid-statement${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
   }
 });
 
@@ -540,7 +385,7 @@ jsonBtn.addEventListener("click", () => {
   if (targetFills.length) {
     const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
     const mappedFills = targetFills.map(f => ({ ...f, sideFormatted: mapSide(f.side) }));
-    downloadBlob(JSON.stringify({ activePositions, fills: mappedFills }, null, 2), `hyperliquid-portfolio${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
+    downloadBlob(JSON.stringify({ fills: mappedFills }, null, 2), `hyperliquid-statement${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
   }
 });
 
@@ -554,14 +399,11 @@ $("clearBtn").addEventListener("click", () => {
   localStorage.removeItem(SAVED_WALLET_KEY);
   setPreset("30");
   fills = [];
-  activePositions = [];
   pnlFilterCheckbox.checked = false;
   clearStatus();
   noticeEl.classList.add("hidden");
   bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">Enter a valid wallet address to display trade history.</td></tr>';
-  positionsBodyEl.innerHTML = '<tr class="empty-row"><td colspan="9">Enter a valid wallet address to display active positions.</td></tr>';
   tableMeta.textContent = "No data loaded.";
-  positionsMeta.textContent = "Enter wallet address to pull live state.";
   resetMetrics();
 });
 

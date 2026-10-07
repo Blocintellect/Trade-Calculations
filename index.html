@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hyperliquid Analytics | Coinglass Style Exporter</title>
+  <title>Hyperliquid Analytics | Trade Statement Generator</title>
   <link rel="stylesheet" href="style.css">
   <!-- html2pdf Library for Professional PDF Statements -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -14,8 +14,8 @@
     <header class="topbar">
       <div class="brand-title">
         <div class="logo-badge"><span class="logo-dot"></span> HYPERLIQUID PRO</div>
-        <h1>Portfolio & Position Analytics</h1>
-        <p class="subtitle">Live active positions tracking, trade fill history, and professional statement export.</p>
+        <h1>Trade Statement Generator</h1>
+        <p class="subtitle">Trade execution history, P&L audit, and professional statement exports.</p>
       </div>
       <div class="header-right">
         <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Theme">
@@ -60,17 +60,12 @@
 
     <section id="limitNotice" class="notice hidden"></section>
 
-    <!-- Coinglass Style Key Metrics Grid -->
+    <!-- Key Metrics Grid -->
     <section class="metrics-grid">
       <div class="metric-card">
         <span class="label">NET P&L</span>
         <strong id="mNet" class="value">—</strong>
-        <span class="subtext">Closed PnL - Fees + Unrealized</span>
-      </div>
-      <div class="metric-card">
-        <span class="label">UNREALIZED P&L</span>
-        <strong id="mUnrealizedPnl" class="value">—</strong>
-        <span class="subtext">From active positions</span>
+        <span class="subtext">Closed PnL - Fees</span>
       </div>
       <div class="metric-card">
         <span class="label">CLOSED P&L</span>
@@ -94,50 +89,8 @@
       </div>
     </section>
 
-    <!-- Navigation Tabs -->
-    <div class="tab-bar">
-      <button id="tabPositions" class="tab-btn active">
-        Active Positions <span id="posBadge" class="tab-badge">0</span>
-      </button>
-      <button id="tabTrades" class="tab-btn">
-        Trade Fills History
-      </button>
-    </div>
-
-    <!-- Active Positions Panel -->
-    <section id="panelPositions" class="panel table-panel">
-      <div class="table-header">
-        <div>
-          <h2>Open Positions</h2>
-          <p id="positionsMeta" class="meta-info">Enter wallet address to pull live state.</p>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table class="coinglass-table">
-          <thead>
-            <tr>
-              <th>COIN</th>
-              <th>SIDE</th>
-              <th>POSITION SIZE</th>
-              <th>ENTRY PRICE</th>
-              <th>MARK PRICE</th>
-              <th>LIQ. PRICE</th>
-              <th>MARGIN USED</th>
-              <th>UNREALIZED P&L</th>
-              <th>ROE %</th>
-            </tr>
-          </thead>
-          <tbody id="positionsBody">
-            <tr class="empty-row">
-              <td colspan="9">Enter a valid wallet address to display active positions.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
     <!-- Trade History Panel -->
-    <section id="panelTrades" class="panel table-panel hidden">
+    <section id="panelTrades" class="panel table-panel">
       <div class="table-header">
         <div>
           <h2>Trade Executions</h2>
@@ -186,79 +139,6 @@
       <span>Data Provider: Hyperliquid Public Info API</span>
       <span>Coinglass Theme • Non-custodial Analytics</span>
     </footer>
-  </div>
-
-  <!-- Professional PDF Template Container -->
-  <div id="pdfTemplate" class="pdf-template">
-    <div class="pdf-header">
-      <div>
-        <div class="pdf-logo">HYPERLIQUID STATEMENT</div>
-        <h1 class="pdf-title">Account Activity & Performance Audit</h1>
-      </div>
-      <div class="pdf-meta-right">
-        <div class="pdf-badge">CONFIRMED RECORD</div>
-        <p><strong>Generated:</strong> <span id="pdfGenDate"></span></p>
-      </div>
-    </div>
-
-    <div class="pdf-summary-box">
-      <div><strong>Wallet Address:</strong> <span id="pdfWallet"></span></div>
-      <div><strong>Statement Period:</strong> <span id="pdfPeriod"></span></div>
-    </div>
-
-    <div class="pdf-section-title">Account Performance Metrics</div>
-    <div class="pdf-grid">
-      <div class="pdf-card"><span>Total Fills</span><strong id="pdfMFills">—</strong></div>
-      <div class="pdf-card"><span>Closed P&L</span><strong id="pdfMPnl">—</strong></div>
-      <div class="pdf-card"><span>Total Fees</span><strong id="pdfMFees">—</strong></div>
-      <div class="pdf-card"><span>Net P&L</span><strong id="pdfMNet">—</strong></div>
-      <div class="pdf-card"><span>Unrealized P&L</span><strong id="pdfMUnrealized">—</strong></div>
-      <div class="pdf-card"><span>Total Volume</span><strong id="pdfMVolume">—</strong></div>
-    </div>
-
-    <div class="pdf-section-title">Active Positions Snapshot</div>
-    <table class="pdf-table">
-      <thead>
-        <tr>
-          <th>Coin</th>
-          <th>Side</th>
-          <th>Size</th>
-          <th>Entry Price</th>
-          <th>Mark Price</th>
-          <th>Margin Used</th>
-          <th>Unrealized P&L</th>
-          <th>ROE</th>
-        </tr>
-      </thead>
-      <tbody id="pdfPositionsBody">
-        <tr><td colspan="8" style="text-align:center;">No active positions.</td></tr>
-      </tbody>
-    </table>
-
-    <div class="pdf-section-title">Trade Fills History</div>
-    <table class="pdf-table">
-      <thead>
-        <tr>
-          <th>Date / Time</th>
-          <th>Coin</th>
-          <th>Dir</th>
-          <th>Side</th>
-          <th>Price</th>
-          <th>Size</th>
-          <th>Notional</th>
-          <th>Closed P&L</th>
-          <th>Fee</th>
-        </tr>
-      </thead>
-      <tbody id="pdfTradeBody">
-        <tr><td colspan="9" style="text-align:center;">No trade fills found.</td></tr>
-      </tbody>
-    </table>
-
-    <div class="pdf-footer">
-      <span>Hyperliquid Analytics Statement</span>
-      <span>Audit Document</span>
-    </div>
   </div>
 
   <script src="script.js"></script>

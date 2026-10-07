@@ -233,7 +233,7 @@ button {
 /* Metrics Grid */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -263,40 +263,6 @@ button {
 .metric-card .subtext {
   font-size: 10px;
   color: var(--text-muted);
-}
-
-/* Tabs Bar */
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--panel-border);
-  margin-bottom: 16px;
-}
-
-.tab-btn {
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px 6px 0 0;
-  height: 40px;
-  padding: 0 16px;
-  font-size: 13px;
-  font-weight: 700;
-  border-bottom: 2px solid transparent;
-}
-
-.tab-btn.active {
-  color: var(--coinglass-green);
-  border-bottom-color: var(--coinglass-green);
-  background: var(--panel-bg);
-}
-
-.tab-badge {
-  background: var(--btn-secondary-bg);
-  color: var(--text-main);
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-size: 10px;
-  margin-left: 4px;
 }
 
 /* Filter & Table Actions */
@@ -394,94 +360,11 @@ h2 { margin: 0; font-size: 15px; font-weight: 700; }
 
 .coin-name { font-weight: 800; color: var(--text-main); }
 
-/* Coinglass Long/Short Badges */
-.badge-long {
-  background: var(--coinglass-green-bg);
-  color: var(--coinglass-green);
-  border: 1px solid var(--coinglass-green);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 800;
-  font-size: 10px;
-}
-
-.badge-short {
-  background: var(--coinglass-red-bg);
-  color: var(--coinglass-red);
-  border: 1px solid var(--coinglass-red);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 800;
-  font-size: 10px;
-}
-
 .text-positive { color: var(--coinglass-green) !important; font-weight: 700; }
 .text-negative { color: var(--coinglass-red) !important; font-weight: 700; }
 
 .dir-open { color: var(--coinglass-blue); }
 .dir-close { color: #f59e0b; }
-
-.hash {
-  font-family: monospace;
-  color: var(--text-muted);
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: inline-block;
-}
-
-.coinglass-footer {
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-muted);
-  font-size: 11px;
-  padding: 12px 0;
-}
-
-/* PDF Print Template */
-.pdf-template {
-  display: none;
-  background: #ffffff;
-  color: #111827;
-  padding: 24px;
-  font-family: Arial, sans-serif;
-}
-
-.pdf-header { display: flex; justify-content: space-between; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 16px; }
-.pdf-logo { font-weight: 900; color: #00b87c; font-size: 14px; letter-spacing: 1px; }
-.pdf-title { font-size: 18px; margin: 4px 0 0 0; }
-.pdf-badge { background: #ecfdf5; color: #00b87c; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 4px; border: 1px solid #a7f3d0; }
-
-.pdf-summary-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 11px; }
-.pdf-section-title { font-size: 12px; font-weight: bold; color: #374151; margin: 14px 0 6px; text-transform: uppercase; }
-
-.pdf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-.pdf-card { background: #f3f4f6; border-radius: 6px; padding: 8px; text-align: center; }
-.pdf-card span { font-size: 9px; color: #6b7280; text-transform: uppercase; display: block; }
-.pdf-card strong { font-size: 13px; color: #111827; margin-top: 4px; display: block; }
-
-.pdf-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 16px; }
-.pdf-table th { background: #f3f4f6; color: #4b5563; padding: 6px; text-align: right; border-bottom: 1px solid #d1d5db; }
-.pdf-table th:first-child, .pdf-table th:nth-child(2) { text-align: left; }
-.pdf-table td { padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; }
-.pdf-table td:first-child, .pdf-table td:nth-child(2) { text-align: left; }
-
-.pdf-footer { border-top: 1px solid #e5e7eb; padding-top: 8px; font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; }
-
-/* Mobile Responsiveness */
-@media (max-width: 1024px) {
-  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
-  .control-row { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 640px) {
-  body { padding: 12px 8px; }
-  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-  .actions-row { flex-direction: column; align-items: stretch; }
-  .preset-btns, .main-btns { width: 100%; }
-  .preset-btns button, .main-btns button { flex: 1; }
-  .coinglass-footer { flex-direction: column; gap: 6px; text-align: center; }
-}
 
 a.hash {
   color: var(--coinglass-blue);
@@ -498,4 +381,27 @@ a.hash {
 a.hash:hover {
   color: var(--coinglass-green);
   text-decoration: underline;
+}
+
+.coinglass-footer {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 12px 0;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 1024px) {
+  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+  .control-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  body { padding: 12px 8px; }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .actions-row { flex-direction: column; align-items: stretch; }
+  .preset-btns, .main-btns { width: 100%; }
+  .preset-btns button, .main-btns button { flex: 1; }
+  .coinglass-footer { flex-direction: column; gap: 6px; text-align: center; }
 }
