@@ -32,13 +32,15 @@
           <label for="wallet">HYPERLIQUID WALLET ADDRESS</label>
           <input id="wallet" type="text" autocomplete="off" spellcheck="false" placeholder="0x1234...abcd">
         </div>
-        <div class="field date-field">
-          <label for="startDate">START DATE</label>
-          <input id="startDate" type="date">
-        </div>
-        <div class="field date-field">
-          <label for="endDate">END DATE</label>
-          <input id="endDate" type="date">
+        <div class="date-group">
+          <div class="field date-field">
+            <label for="startDate">START DATE</label>
+            <input id="startDate" type="date">
+          </div>
+          <div class="field date-field">
+            <label for="endDate">END DATE</label>
+            <input id="endDate" type="date">
+          </div>
         </div>
       </div>
 
@@ -92,7 +94,7 @@
     <!-- Trade History Panel -->
     <section id="panelTrades" class="panel table-panel">
       <div class="table-header">
-        <div>
+        <div class="table-header-info">
           <h2>Trade Executions</h2>
           <p id="tableMeta" class="meta-info">No trade data loaded.</p>
         </div>
