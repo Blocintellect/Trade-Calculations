@@ -1,91 +1,257 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trading P&L Performance</title>
+  <title>Hyperliquid Analytics | Coinglass Style Exporter</title>
   <link rel="stylesheet" href="style.css">
+  <!-- html2pdf Library for Professional PDF Statements -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
-  <div class="toolbar">
-    <button id="downloadBtn" type="button">Download as PNG</button>
-  </div>
-
-  <main id="report" class="report">
-    <header class="header">
-      <h1>TRADING P&amp;L PERFORMANCE</h1>
+  <div class="app">
+    <!-- Header / Topbar -->
+    <header class="topbar">
+      <div class="brand-title">
+        <div class="logo-badge"><span class="logo-dot"></span> HYPERLIQUID PRO</div>
+        <h1>Portfolio & Position Analytics</h1>
+        <p class="subtitle">Live active positions tracking, trade fill history, and professional statement export.</p>
+      </div>
+      <div class="header-right">
+        <div class="security-tag"><span class="icon">🔒</span> PUBLIC ADDRESS READ-ONLY</div>
+      </div>
     </header>
 
-    <section class="hero">
-      <div class="hero-label">FINAL TOTAL P&amp;L</div>
-      <div class="hero-value">+$5,550</div>Cumulative net result
-      
-    </section>
-
-    <section class="section">
-      <h2>P&amp;L breakdown</h2>
-      <table class="breakdown">
-        <thead>
-          <tr>
-            <th>Period</th>
-            <th>Net / Final P&amp;L</th>
-            <th>Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>July → August</td>
-            <td>+$3,320</td>
-            <td>+$3,320</td>
-          </tr>
-          <tr>
-            <td>August → September</td>
-            <td>−$925</td>
-            <td>−$4,245</td>
-          </tr>
-          <tr>
-            <td>September → October</td>
-            <td>+$5,550</td>
-            <td>+$6,475</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="section important-section">
-      <h2>Total</h2>
-      <div class="important-grid">
-        <div class="important-card">
-          <div class="important-label">FINAL NET P&amp;L</div>
-          <div class="important-value">+$5,550</div>
+    <!-- Controls Panel -->
+    <section class="panel controls">
+      <div class="control-row">
+        <div class="field wallet-field">
+          <label for="wallet">HYPERLIQUID WALLET ADDRESS</label>
+          <input id="wallet" type="text" autocomplete="off" spellcheck="false" placeholder="0x1234...abcd">
         </div>
-        <div class="important-card">
-          <div class="important-label">TOTAL PERIODS</div>
-          <div class="important-value">3</div>
+        <div class="field date-field">
+          <label for="startDate">START DATE</label>
+          <input id="startDate" type="date">
         </div>
-        <div class="important-card">
-          <div class="important-label">LARGEST GROSS GAIN</div>
-          <div class="important-value">+$6,475</div>
-        </div>
-        <div class="important-card">
-          <div class="important-label">LARGEST LOSS</div>
-          <div class="important-value">−$925</div>
+        <div class="field date-field">
+          <label for="endDate">END DATE</label>
+          <input id="endDate" type="date">
         </div>
       </div>
 
-      <p class="note">
-        Note: The +$3,320 July–August result is historical progression and is not added again to the final +$5,550.
-        The −$925 loss is already incorporated into the September–October calculation.
-      </p>
+      <div class="actions-row">
+        <div class="preset-btns">
+          <button id="allBtn" class="secondary active">All (30D)</button>
+          <button id="monthBtn" class="secondary">This Month</button>
+          <button id="todayBtn" class="secondary">Today</button>
+        </div>
+        <div class="main-btns">
+          <button id="fetchBtn" class="btn-primary">Fetch Data</button>
+          <button id="clearBtn" class="btn-ghost">Clear</button>
+        </div>
+      </div>
+
+      <div id="status" class="status hidden"></div>
     </section>
 
-    <footer class="footer">
-      <span>Trading P&amp;L numerical report</span>
-      <span>Page 1</span>
-    </footer>
-  </main>
+    <section id="limitNotice" class="notice hidden"></section>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Coinglass Style Key Metrics Grid -->
+    <section class="metrics-grid">
+      <div class="metric-card">
+        <span class="label">NET P&L</span>
+        <strong id="mNet" class="value">—</strong>
+        <span class="subtext">Closed PnL - Fees + Unrealized</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">UNREALIZED P&L</span>
+        <strong id="mUnrealizedPnl" class="value">—</strong>
+        <span class="subtext">From active positions</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">CLOSED P&L</span>
+        <strong id="mPnl" class="value">—</strong>
+        <span class="subtext">Realized trades</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">TOTAL FEES</span>
+        <strong id="mFees" class="value">—</strong>
+        <span class="subtext">Trading fees paid</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">TOTAL VOLUME</span>
+        <strong id="mVolume" class="value">—</strong>
+        <span class="subtext">Notional turnover</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">TOTAL FILLS</span>
+        <strong id="mFills" class="value">—</strong>
+        <span class="subtext">Executed orders</span>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-bar">
+      <button id="tabPositions" class="tab-btn active">
+        Active Positions <span id="posBadge" class="tab-badge">0</span>
+      </button>
+      <button id="tabTrades" class="tab-btn">
+        Trade Fills History
+      </button>
+    </div>
+
+    <!-- Active Positions Panel -->
+    <section id="panelPositions" class="panel table-panel">
+      <div class="table-header">
+        <div>
+          <h2>Open Positions</h2>
+          <p id="positionsMeta" class="meta-info">Enter wallet address to pull live state.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="coinglass-table">
+          <thead>
+            <tr>
+              <th>COIN</th>
+              <th>SIDE</th>
+              <th>POSITION SIZE</th>
+              <th>ENTRY PRICE</th>
+              <th>MARK PRICE</th>
+              <th>LIQ. PRICE</th>
+              <th>MARGIN USED</th>
+              <th>UNREALIZED P&L</th>
+              <th>ROE %</th>
+            </tr>
+          </thead>
+          <tbody id="positionsBody">
+            <tr class="empty-row">
+              <td colspan="9">Enter a valid wallet address to display active positions.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Trade History Panel -->
+    <section id="panelTrades" class="panel table-panel hidden">
+      <div class="table-header">
+        <div>
+          <h2>Trade Executions</h2>
+          <p id="tableMeta" class="meta-info">No trade data loaded.</p>
+        </div>
+        <div class="export-actions">
+          <button id="pdfBtn" class="btn-export pdf-export" disabled>PDF Statement</button>
+          <button id="csvBtn" class="btn-export" disabled>Export CSV</button>
+          <button id="jsonBtn" class="btn-export" disabled>Export JSON</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="coinglass-table">
+          <thead>
+            <tr>
+              <th>DATE / TIME</th>
+              <th>COIN</th>
+              <th>DIR</th>
+              <th>SIDE</th>
+              <th>PRICE</th>
+              <th>SIZE</th>
+              <th>NOTIONAL</th>
+              <th>CLOSED P&L</th>
+              <th>FEE</th>
+              <th>FEE TOKEN</th>
+              <th>ORDER ID</th>
+              <th>TRADE ID</th>
+              <th>HASH</th>
+            </tr>
+          </thead>
+          <tbody id="tradeBody">
+            <tr class="empty-row">
+              <td colspan="13">Enter a valid wallet address to display trade history.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="coinglass-footer">
+      <span>Data Provider: Hyperliquid Public Info API</span>
+      <span>Coinglass Theme • Non-custodial Analytics</span>
+    </footer>
+  </div>
+
+  <!-- Professional PDF Template Container -->
+  <div id="pdfTemplate" class="pdf-template">
+    <div class="pdf-header">
+      <div>
+        <div class="pdf-logo">HYPERLIQUID STATEMENT</div>
+        <h1 class="pdf-title">Account Activity & Performance Audit</h1>
+      </div>
+      <div class="pdf-meta-right">
+        <div class="pdf-badge">CONFIRMED RECORD</div>
+        <p><strong>Generated:</strong> <span id="pdfGenDate"></span></p>
+      </div>
+    </div>
+
+    <div class="pdf-summary-box">
+      <div><strong>Wallet Address:</strong> <span id="pdfWallet"></span></div>
+      <div><strong>Statement Period:</strong> <span id="pdfPeriod"></span></div>
+    </div>
+
+    <div class="pdf-section-title">Account Performance Metrics</div>
+    <div class="pdf-grid">
+      <div class="pdf-card"><span>Total Fills</span><strong id="pdfMFills">—</strong></div>
+      <div class="pdf-card"><span>Closed P&L</span><strong id="pdfMPnl">—</strong></div>
+      <div class="pdf-card"><span>Total Fees</span><strong id="pdfMFees">—</strong></div>
+      <div class="pdf-card"><span>Net P&L</span><strong id="pdfMNet">—</strong></div>
+      <div class="pdf-card"><span>Unrealized P&L</span><strong id="pdfMUnrealized">—</strong></div>
+      <div class="pdf-card"><span>Total Volume</span><strong id="pdfMVolume">—</strong></div>
+    </div>
+
+    <div class="pdf-section-title">Active Positions Snapshot</div>
+    <table class="pdf-table">
+      <thead>
+        <tr>
+          <th>Coin</th>
+          <th>Side</th>
+          <th>Size</th>
+          <th>Entry Price</th>
+          <th>Mark Price</th>
+          <th>Margin Used</th>
+          <th>Unrealized P&L</th>
+          <th>ROE</th>
+        </tr>
+      </thead>
+      <tbody id="pdfPositionsBody">
+        <tr><td colspan="8" style="text-align:center;">No active positions.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pdf-section-title">Trade Fills History</div>
+    <table class="pdf-table">
+      <thead>
+        <tr>
+          <th>Date / Time</th>
+          <th>Coin</th>
+          <th>Dir</th>
+          <th>Side</th>
+          <th>Price</th>
+          <th>Size</th>
+          <th>Notional</th>
+          <th>Closed P&L</th>
+          <th>Fee</th>
+        </tr>
+      </thead>
+      <tbody id="pdfTradeBody">
+        <tr><td colspan="9" style="text-align:center;">No trade fills found.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pdf-footer">
+      <span>Hyperliquid Analytics Statement</span>
+      <span>Audit Document</span>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
