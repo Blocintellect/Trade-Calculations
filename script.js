@@ -17,7 +17,7 @@ const walletEl = $("wallet"),
       monthBtn = $("monthBtn"),
       ytdBtn = $("ytdBtn"),
       todayBtn = $("todayBtn"),
-      pnlFilterCheckbox = $("pnlFilterCheckbox"),
+      pnlFilterSelect = $("pnlFilterSelect"),
       themeToggleBtn = $("themeToggleBtn"),
       themeIcon = $("themeIcon"),
       themeLabel = $("themeLabel");
@@ -229,9 +229,14 @@ function updateMetrics() {
   setMetric("mNet", money(netPnl, 2), netPnl);
 }
 
+// Dropdown Filter Selection Logic
 function getFilteredFills() {
-  if (pnlFilterCheckbox.checked) {
+  const filterVal = pnlFilterSelect.value;
+  if (filterVal === "positive") {
     return fills.filter(f => num(f.closedPnl) > 0);
+  }
+  if (filterVal === "negative") {
+    return fills.filter(f => num(f.closedPnl) < 0);
   }
   return fills;
 }
@@ -240,7 +245,7 @@ function renderTrades() {
   const displayFills = getFilteredFills();
 
   if (!displayFills.length) {
-    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">No trade fills found matching criteria.</td></tr>';
+    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">No trade fills found matching selected criteria.</td></tr>';
     tableMeta.textContent = "No trade fills to show.";
     return;
   }
@@ -287,7 +292,7 @@ function renderTrades() {
   updateMetrics();
 }
 
-pnlFilterCheckbox.addEventListener("change", renderTrades);
+pnlFilterSelect.addEventListener("change", renderTrades);
 
 fetchBtn.addEventListener("click", async () => {
   clearStatus();
@@ -372,22 +377,170 @@ function downloadBlob(content, name, type) {
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
 
+// Filtered CSV Export
 csvBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
-    const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
+    const filterSuffix = pnlFilterSelect.value !== "all" ? `-${pnlFilterSelect.value}-pnl` : "";
     downloadBlob(toCSV(targetFills), `hyperliquid-statement${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
   }
 });
 
+// Filtered JSON Export
 jsonBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
-    const filterSuffix = pnlFilterCheckbox.checked ? "-positive-pnl" : "";
+    const filterSuffix = pnlFilterSelect.value !== "all" ? `-${pnlFilterSelect.value}-pnl` : "";
     const mappedFills = targetFills.map(f => ({ ...f, sideFormatted: mapSide(f.side) }));
     downloadBlob(JSON.stringify({ fills: mappedFills }, null, 2), `hyperliquid-statement${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
   }
 });
+
+// Multi-Page PDF Generator
+async function generatePDF() {
+  const targetFills = getFilteredFills();
+  if (!targetFills.length) return;
+
+  if (typeof html2canvas === "undefined" || typeof window.jspdf === "undefined") {
+    alert("PDF generator libraries are still loading. Please retry in a moment.");
+    return;
+  }
+
+  pdfBtn.disabled = true;
+  pdfBtn.textContent = "Generating...";
+
+  try {
+    const wallet = walletEl.value.trim();
+    const filterLabel = pnlFilterSelect.options[pnlFilterSelect.selectedIndex].text;
+    const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
+    const totalFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
+    const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
+
+    // Chunk trades into pages (25 rows per page to prevent cutoff)
+    const ROWS_PER_PAGE = 25;
+    const totalPages = Math.ceil(targetFills.length / ROWS_PER_PAGE);
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF("landscape", "pt", "a4");
+
+    for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+      const pageFills = targetFills.slice(pageIdx * ROWS_PER_PAGE, (pageIdx + 1) * ROWS_PER_PAGE);
+
+      const printArea = document.createElement("div");
+      printArea.style.position = "absolute";
+      printArea.style.left = "-9999px";
+      printArea.style.top = "0";
+      printArea.style.width = "1000px";
+      printArea.style.background = "#ffffff";
+      printArea.style.padding = "24px";
+      printArea.style.color = "#111827";
+      printArea.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+      // Render header and summary cards on Page 1 only
+      const headerSection = pageIdx === 0 ? `
+        <div style="border-bottom: 2px solid #00b87c; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <h2 style="margin: 0; color: #00b87c; font-size: 20px; font-weight: 800;">HYPERLIQUID PRO</h2>
+            <p style="margin: 3px 0 0; color: #4b5563; font-size: 11px; font-weight: 600;">OFFICIAL TRADE AUDIT STATEMENT</p>
+          </div>
+          <div style="text-align: right; font-size: 10px; color: #374151; line-height: 1.4;">
+            <p style="margin: 0;"><strong>Account:</strong> ${esc(wallet)}</p>
+            <p style="margin: 0;"><strong>Period:</strong> ${esc(startEl.value)} to ${esc(endEl.value)}</p>
+            <p style="margin: 0;"><strong>Filter Applied:</strong> ${esc(filterLabel)}</p>
+            <p style="margin: 0;"><strong>Generated:</strong> ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
+            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">TOTAL TRADES</span>
+            <span style="display: block; font-size: 14px; font-weight: 700; color: #111827; margin-top: 2px;">${targetFills.length.toLocaleString()}</span>
+          </div>
+          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
+            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">CLOSED P&L</span>
+            <span style="display: block; font-size: 14px; font-weight: 700; color: ${totalPnl >= 0 ? '#059669' : '#dc2626'}; margin-top: 2px;">${money(totalPnl, 2)}</span>
+          </div>
+          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
+            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">TOTAL FEES</span>
+            <span style="display: block; font-size: 14px; font-weight: 700; color: #111827; margin-top: 2px;">${plainMoney(totalFees, 2)}</span>
+          </div>
+          <div style="border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; border-radius: 4px;">
+            <span style="display: block; font-size: 9px; font-weight: 700; color: #6b7280;">TOTAL VOLUME</span>
+            <span style="display: block; font-size: 14px; font-weight: 700; color: #111827; margin-top: 2px;">${plainMoney(totalVol, 2)}</span>
+          </div>
+        </div>
+      ` : `
+        <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between;">
+          <span style="font-size: 11px; font-weight: 700; color: #00b87c;">HYPERLIQUID PRO — STATEMENT</span>
+          <span style="font-size: 10px; color: #6b7280;">Account: ${esc(wallet)}</span>
+        </div>
+      `;
+
+      printArea.innerHTML = `
+        ${headerSection}
+        <table style="width: 100%; border-collapse: collapse; font-size: 9px;">
+          <thead>
+            <tr style="background-color: #f3f4f6;">
+              <th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #d1d5db; color: #374151;">Date / Time</th>
+              <th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #d1d5db; color: #374151;">Coin</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Dir</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Side</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Price</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Size</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Notional</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Closed P&L</th>
+              <th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #d1d5db; color: #374151;">Fee</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageFills.map(f => {
+              const p = num(f.closedPnl);
+              return `<tr style="border-bottom: 1px solid #e5e7eb;">
+                <td style="padding: 5px 8px; text-align: left; color: #1f2937;">${esc(formatDate(f.time))}</td>
+                <td style="padding: 5px 8px; text-align: left; color: #111827; font-weight: 700;">${esc(f.coin)}</td>
+                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(f.dir)}</td>
+                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(mapSide(f.side))}</td>
+                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(f.px)}</td>
+                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${esc(f.sz)}</td>
+                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${plainMoney(Math.abs(num(f.px) * num(f.sz)), 2)}</td>
+                <td style="padding: 5px 8px; text-align: right; font-weight: 700; color: ${p > 0 ? '#059669' : p < 0 ? '#dc2626' : '#111827'};">${money(p, 2)}</td>
+                <td style="padding: 5px 8px; text-align: right; color: #1f2937;">${plainMoney(f.fee, 2)}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+
+        <div style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 8px; display: flex; justify-content: space-between; font-size: 8px; color: #9ca3af;">
+          <span>Hyperliquid On-Chain Statement</span>
+          <span>Page ${pageIdx + 1} of ${totalPages}</span>
+        </div>
+      `;
+
+      document.body.appendChild(printArea);
+
+      const canvas = await html2canvas(printArea, { scale: 2, useCORS: true });
+      document.body.removeChild(printArea);
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      if (pageIdx > 0) pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    }
+
+    pdf.save(`statement-${wallet.slice(0, 8)}-${pnlFilterSelect.value}.pdf`);
+
+  } catch (err) {
+    console.error("PDF Generation error:", err);
+    alert("Unable to compile PDF statement. Please check console for technical logs.");
+  } finally {
+    pdfBtn.disabled = false;
+    pdfBtn.textContent = "PDF Statement";
+  }
+}
+
+pdfBtn.addEventListener("click", generatePDF);
 
 todayBtn.addEventListener("click", () => setPreset("today"));
 monthBtn.addEventListener("click", () => setPreset("month"));
@@ -399,7 +552,7 @@ $("clearBtn").addEventListener("click", () => {
   localStorage.removeItem(SAVED_WALLET_KEY);
   setPreset("30");
   fills = [];
-  pnlFilterCheckbox.checked = false;
+  pnlFilterSelect.value = "all";
   clearStatus();
   noticeEl.classList.add("hidden");
   bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">Enter a valid wallet address to display trade history.</td></tr>';

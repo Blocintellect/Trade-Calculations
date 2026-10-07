@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hyperliquid Analytics | Trade Statement Generator</title>
   <link rel="stylesheet" href="style.css">
-  <!-- html2pdf Library for Professional PDF Statements -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- html2canvas and jsPDF for reliable image-to-PDF compilation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body class="dark-theme">
   <div class="app">
@@ -46,9 +47,9 @@
 
       <div class="actions-row">
         <div class="preset-btns">
-          <button id="allBtn" class="secondary active">30 Days</button>
-          <button id="monthBtn" class="secondary">MTD</button>
-          <button id="ytdBtn" class="secondary">YTD</button>
+          <button id="allBtn" class="secondary active">All (30D)</button>
+          <button id="monthBtn" class="secondary">This Month</button>
+          <button id="ytdBtn" class="secondary">Year to Date</button>
           <button id="todayBtn" class="secondary">Today</button>
         </div>
         <div class="main-btns">
@@ -99,9 +100,14 @@
           <p id="tableMeta" class="meta-info">No trade data loaded.</p>
         </div>
         <div class="filter-export-container">
-          <label class="filter-checkbox-label">
-            <input type="checkbox" id="pnlFilterCheckbox"> Show only Closed P&L > $0
-          </label>
+          <div class="filter-dropdown-field">
+            <label for="pnlFilterSelect">FILTER P&L:</label>
+            <select id="pnlFilterSelect">
+              <option value="all">All Trades</option>
+              <option value="positive">Positive CLOSED P&L (> $0)</option>
+              <option value="negative">Negative CLOSED P&L (< $0)</option>
+            </select>
+          </div>
           <div class="export-actions">
             <button id="pdfBtn" class="btn-export pdf-export" disabled>PDF Statement</button>
             <button id="csvBtn" class="btn-export" disabled>Export CSV</button>

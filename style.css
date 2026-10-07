@@ -163,7 +163,7 @@ h1 {
   margin-bottom: 6px;
 }
 
-input {
+input, select {
   width: 100%;
   height: 42px;
   background: var(--input-bg);
@@ -175,7 +175,7 @@ input {
   outline: none;
 }
 
-input:focus {
+input:focus, select:focus {
   border-color: var(--coinglass-blue);
 }
 
@@ -281,20 +281,29 @@ button {
   flex-wrap: wrap;
 }
 
-.filter-checkbox-label {
+.filter-dropdown-field {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-main);
-  cursor: pointer;
-  user-select: none;
 }
 
-.filter-checkbox-label input {
-  width: 16px;
-  height: 16px;
+.filter-dropdown-field label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.filter-dropdown-field select {
+  height: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: var(--btn-secondary-bg);
+  border-color: var(--btn-secondary-border);
+  color: var(--text-main);
   cursor: pointer;
 }
 
@@ -338,7 +347,6 @@ h2 { margin: 0; font-size: 15px; font-weight: 700; }
   -webkit-overflow-scrolling: touch;
 }
 
-/* Custom Scrollbars for Smooth Touch Scrolling */
 .table-wrap::-webkit-scrollbar {
   height: 6px;
 }
@@ -419,81 +427,28 @@ a.hash:hover {
 
 /* Mobile & Tablet Responsiveness */
 @media (max-width: 1024px) {
-  .metrics-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .control-row {
-    grid-template-columns: 1fr;
-  }
-  .date-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+  .control-row { grid-template-columns: 1fr; }
+  .date-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 }
 
 @media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .table-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-export-container {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .export-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .export-actions .pdf-export {
-    grid-column: span 2;
-  }
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .header-right { width: 100%; justify-content: space-between; }
+  .table-header { flex-direction: column; align-items: stretch; }
+  .filter-export-container { flex-direction: column; align-items: stretch; }
+  .filter-dropdown-field { flex-direction: column; align-items: stretch; }
+  .export-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .export-actions .pdf-export { grid-column: span 2; }
 }
 
 @media (max-width: 640px) {
   body { padding: 12px 8px; }
-  
   h1 { font-size: 20px; }
-
-  .metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .metrics-grid .metric-card:last-child {
-    grid-column: span 2;
-  }
-
-  .actions-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .preset-btns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .main-btns {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-  }
-
-  .coinglass-footer {
-    flex-direction: column;
-    gap: 6px;
-    text-align: center;
-  }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .metrics-grid .metric-card:last-child { grid-column: span 2; }
+  .actions-row { flex-direction: column; align-items: stretch; }
+  .preset-btns { display: grid; grid-template-columns: 1fr 1fr; }
+  .main-btns { display: grid; grid-template-columns: 2fr 1fr; }
+  .coinglass-footer { flex-direction: column; gap: 6px; text-align: center; }
 }
