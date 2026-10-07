@@ -391,7 +391,7 @@ jsonBtn.addEventListener("click", () => {
   }
 });
 
-// Native AutoTable PDF Generator (Fixes cut-off and split lines)
+// PDF Generator with NET P&L and High-Contrast Light Colors
 function generatePDF() {
   const targetFills = getFilteredFills();
   if (!targetFills.length) return;
@@ -412,6 +412,7 @@ function generatePDF() {
     const filterLabel = pnlFilterSelect.options[pnlFilterSelect.selectedIndex].text;
     const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
     const totalFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
+    const netPnl = totalPnl - totalFees;
     const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
     // Title Section
@@ -432,45 +433,78 @@ function generatePDF() {
     doc.text(`Period: ${startEl.value} to ${endEl.value}`, 802, 47, { align: "right" });
     doc.text(`Filter: ${filterLabel}`, 802, 59, { align: "right" });
 
-    // Summary Metric Cards
+    // Summary Metric Cards (5 Cards including NET P&L)
+    const cardWidth = 142;
+    const cardGap = 13;
+    let cardX = 40;
+
+    // Card 1: NET P&L
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
-
-    doc.roundedRect(40, 70, 175, 40, 3, 3, "FD");
+    doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text("TOTAL TRADES", 50, 82);
-    doc.setFontSize(11);
-    doc.setTextColor(15, 23, 42);
-    doc.text(targetFills.length.toLocaleString(), 50, 100);
+    doc.text("NET P&L", cardX + 10, 82);
+    doc.setFontSize(10);
+    if (netPnl >= 0) doc.setTextColor(0, 150, 100);
+    else doc.setTextColor(220, 38, 38);
+    doc.text(money(netPnl, 2), cardX + 10, 100);
 
-    doc.roundedRect(228, 70, 175, 40, 3, 3, "FD");
+    // Card 2: CLOSED P&L
+    cardX += cardWidth + cardGap;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text("CLOSED P&L", 238, 82);
-    doc.setFontSize(11);
-    if (totalPnl >= 0) doc.setTextColor(0, 184, 124);
-    else doc.setTextColor(246, 70, 93);
-    doc.text(money(totalPnl, 2), 238, 100);
+    doc.text("CLOSED P&L", cardX + 10, 82);
+    doc.setFontSize(10);
+    if (totalPnl >= 0) doc.setTextColor(0, 150, 100);
+    else doc.setTextColor(220, 38, 38);
+    doc.text(money(totalPnl, 2), cardX + 10, 100);
 
-    doc.roundedRect(416, 70, 175, 40, 3, 3, "FD");
+    // Card 3: TOTAL FEES
+    cardX += cardWidth + cardGap;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text("TOTAL FEES", 426, 82);
-    doc.setFontSize(11);
+    doc.text("TOTAL FEES", cardX + 10, 82);
+    doc.setFontSize(10);
     doc.setTextColor(15, 23, 42);
-    doc.text(plainMoney(totalFees, 2), 426, 100);
+    doc.text(plainMoney(totalFees, 2), cardX + 10, 100);
 
-    doc.roundedRect(604, 70, 198, 40, 3, 3, "FD");
+    // Card 4: TOTAL VOLUME
+    cardX += cardWidth + cardGap;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text("TOTAL VOLUME", 614, 82);
-    doc.setFontSize(11);
+    doc.text("TOTAL VOLUME", cardX + 10, 82);
+    doc.setFontSize(10);
     doc.setTextColor(15, 23, 42);
-    doc.text(plainMoney(totalVol, 2), 614, 100);
+    doc.text(plainMoney(totalVol, 2), cardX + 10, 100);
 
-    // Data Mapping for Vector Engine
+    // Card 5: TOTAL TRADES
+    cardX += cardWidth + cardGap;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("TOTAL TRADES", cardX + 10, 82);
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text(targetFills.length.toLocaleString(), cardX + 10, 100);
+
+    // Data Mapping for Table
     const tableHeaders = [["Date / Time", "Coin", "Dir", "Side", "Price", "Size", "Notional", "Closed P&L", "Fee"]];
     const tableBody = targetFills.map(f => [
       formatDate(f.time),
@@ -484,42 +518,47 @@ function generatePDF() {
       plainMoney(f.fee, 2)
     ]);
 
-    // Draw Vector Table with Page Breaks
+    // High contrast light theme table options
     doc.autoTable({
       head: tableHeaders,
       body: tableBody,
       startY: 125,
-      theme: "grid",
+      theme: "striped",
       margin: { top: 40, bottom: 40, left: 40, right: 40 },
       styles: {
         fontSize: 8,
-        cellPadding: 4,
+        cellPadding: 5,
         overflow: "linebreak",
-        halign: "right"
+        halign: "right",
+        textColor: [30, 41, 59], // High contrast dark slate text
+        fillColor: [255, 255, 255]
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252] // Light subtle alternate row background
       },
       headStyles: {
-        fillColor: [241, 245, 249],
-        textColor: [71, 85, 105],
+        fillColor: [226, 232, 240], // Distinct light grey header fill
+        textColor: [15, 23, 42], // Strong dark text for headers
         fontStyle: "bold",
         halign: "right"
       },
       columnStyles: {
         0: { halign: "left" },
-        1: { halign: "left", fontStyle: "bold" }
+        1: { halign: "left", fontStyle: "bold", textColor: [15, 23, 42] }
       },
       didParseCell: function (data) {
         if (data.section === "body" && data.column.index === 7) {
           const rawText = data.cell.raw;
           if (rawText.startsWith("+")) {
-            data.cell.styles.textColor = [0, 184, 124];
+            data.cell.styles.textColor = [0, 150, 100]; // Bold readable green
             data.cell.styles.fontStyle = "bold";
           } else if (rawText.startsWith("−") || rawText.startsWith("-")) {
-            data.cell.styles.textColor = [246, 70, 93];
+            data.cell.styles.textColor = [220, 38, 38]; // Bold readable red
             data.cell.styles.fontStyle = "bold";
           }
         }
       },
-      didDrawPage: function (data) {
+      didDrawPage: function () {
         const str = `Page ${doc.internal.getNumberOfPages()}`;
         doc.setFontSize(8);
         doc.setTextColor(150);
