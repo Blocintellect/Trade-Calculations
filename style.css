@@ -482,3 +482,20 @@ h2 { margin: 0; font-size: 15px; font-weight: 700; }
   .preset-btns button, .main-btns button { flex: 1; }
   .coinglass-footer { flex-direction: column; gap: 6px; text-align: center; }
 }
+
+a.hash {
+  color: var(--coinglass-blue);
+  text-decoration: none;
+  font-family: monospace;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  vertical-align: middle;
+  transition: color 0.15s ease;
+}
+
+a.hash:hover {
+  color: var(--coinglass-green);
+  text-decoration: underline;
+}
