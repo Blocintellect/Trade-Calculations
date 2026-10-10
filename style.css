@@ -452,3 +452,34 @@ a.hash:hover {
   .main-btns { display: grid; grid-template-columns: 2fr 1fr; }
   .coinglass-footer { flex-direction: column; gap: 6px; text-align: center; }
 }
+
+/* View Navigation Tabs */
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.view-tab {
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.view-tab:hover {
+  background: var(--hover-bg);
+  color: var(--text-main);
+}
+
+.view-tab.active {
+  background: var(--panel-bg);
+  border-color: var(--coinglass-blue);
+  color: var(--coinglass-blue);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}

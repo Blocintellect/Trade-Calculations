@@ -94,6 +94,12 @@
       </div>
     </section>
 
+    <!-- View Toggle Tabs -->
+    <div class="view-tabs">
+      <button id="tabTradesBtn" class="view-tab active">Trade Executions</button>
+      <button id="tabMonthlyBtn" class="view-tab">Monthly P&L Breakdown</button>
+    </div>
+
     <!-- Trade History Panel -->
     <section id="panelTrades" class="panel table-panel">
       <div class="table-header">
@@ -139,6 +145,35 @@
           <tbody id="tradeBody">
             <tr class="empty-row">
               <td colspan="13">Enter a valid wallet address to display trade history.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Monthly P&L Panel (Hidden by default) -->
+    <section id="panelMonthly" class="panel table-panel hidden">
+      <div class="table-header">
+        <div class="table-header-info">
+          <h2>Monthly Profit & Loss Breakdown</h2>
+          <p id="monthlyMeta" class="meta-info">Aggregated monthly performance metrics.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="coinglass-table">
+          <thead>
+            <tr>
+              <th style="text-align: left;">MONTH</th>
+              <th>CLOSED P&L</th>
+              <th>TOTAL FEES</th>
+              <th>NET P&L</th>
+              <th>TOTAL VOLUME</th>
+              <th>TOTAL FILLS</th>
+            </tr>
+          </thead>
+          <tbody id="monthlyBody">
+            <tr class="empty-row">
+              <td colspan="6">Enter a valid wallet address to view monthly breakdown.</td>
             </tr>
           </tbody>
         </table>

@@ -9,7 +9,9 @@ const walletEl = $("wallet"),
       statusEl = $("status"),
       noticeEl = $("limitNotice"),
       bodyEl = $("tradeBody"),
+      monthlyBodyEl = $("monthlyBody"),
       tableMeta = $("tableMeta"),
+      monthlyMeta = $("monthlyMeta"),
       csvBtn = $("csvBtn"),
       jsonBtn = $("jsonBtn"),
       pdfBtn = $("pdfBtn"),
@@ -20,7 +22,11 @@ const walletEl = $("wallet"),
       pnlFilterSelect = $("pnlFilterSelect"),
       themeToggleBtn = $("themeToggleBtn"),
       themeIcon = $("themeIcon"),
-      themeLabel = $("themeLabel");
+      themeLabel = $("themeLabel"),
+      tabTradesBtn = $("tabTradesBtn"),
+      tabMonthlyBtn = $("tabMonthlyBtn"),
+      panelTrades = $("panelTrades"),
+      panelMonthly = $("panelMonthly");
 
 let fills = [];
 
@@ -34,6 +40,22 @@ if (localStorage.getItem(SAVED_WALLET_KEY)) {
 
 walletEl.addEventListener("input", () => {
   localStorage.setItem(SAVED_WALLET_KEY, walletEl.value.trim());
+});
+
+// Tab Switching Logic
+tabTradesBtn.addEventListener("click", () => {
+  tabTradesBtn.classList.add("active");
+  tabMonthlyBtn.classList.remove("active");
+  panelTrades.classList.remove("hidden");
+  panelMonthly.classList.add("hidden");
+});
+
+tabMonthlyBtn.addEventListener("click", () => {
+  tabMonthlyBtn.classList.add("active");
+  tabTradesBtn.classList.remove("active");
+  panelMonthly.classList.remove("hidden");
+  panelTrades.classList.add("hidden");
+  renderMonthlyPnl();
 });
 
 // Map side code (B -> Buy, A -> Sell)
@@ -238,6 +260,54 @@ function getFilteredFills() {
   return fills;
 }
 
+function renderMonthlyPnl() {
+  if (!fills.length) {
+    monthlyBodyEl.innerHTML = '<tr class="empty-row"><td colspan="6">No trade fills loaded to generate monthly breakdown.</td></tr>';
+    monthlyMeta.textContent = "No data loaded.";
+    return;
+  }
+
+  const monthlyMap = {};
+
+  fills.forEach(f => {
+    const d = new Date(Number(f.time));
+    const yearMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+    if (!monthlyMap[yearMonthKey]) {
+      monthlyMap[yearMonthKey] = {
+        label: label,
+        closedPnl: 0,
+        fees: 0,
+        volume: 0,
+        fillsCount: 0
+      };
+    }
+
+    monthlyMap[yearMonthKey].closedPnl += num(f.closedPnl);
+    monthlyMap[yearMonthKey].fees += num(f.fee);
+    monthlyMap[yearMonthKey].volume += Math.abs(num(f.px) * num(f.sz));
+    monthlyMap[yearMonthKey].fillsCount += 1;
+  });
+
+  const sortedKeys = Object.keys(monthlyMap).sort().reverse();
+
+  monthlyBodyEl.innerHTML = sortedKeys.map(k => {
+    const m = monthlyMap[k];
+    const net = m.closedPnl - m.fees;
+    return `<tr>
+      <td style="text-align: left; font-weight: 800;">${esc(m.label)}</td>
+      <td class="${m.closedPnl > 0 ? "text-positive" : m.closedPnl < 0 ? "text-negative" : ""}">${money(m.closedPnl, 2)}</td>
+      <td>${plainMoney(m.fees, 2)}</td>
+      <td class="${net > 0 ? "text-positive" : net < 0 ? "text-negative" : ""}">${money(net, 2)}</td>
+      <td>${plainMoney(m.volume, 2)}</td>
+      <td>${m.fillsCount.toLocaleString()}</td>
+    </tr>`;
+  }).join("");
+
+  monthlyMeta.textContent = `Showing aggregated monthly performance across ${sortedKeys.length} month(s).`;
+}
+
 function renderTrades() {
   const displayFills = getFilteredFills();
 
@@ -287,6 +357,7 @@ function renderTrades() {
   pdfBtn.disabled = false;
 
   updateMetrics();
+  renderMonthlyPnl();
 }
 
 pnlFilterSelect.addEventListener("change", renderTrades);
@@ -530,15 +601,15 @@ function generatePDF() {
         cellPadding: 5,
         overflow: "linebreak",
         halign: "right",
-        textColor: [30, 41, 59], // High contrast dark slate text
+        textColor: [30, 41, 59],
         fillColor: [255, 255, 255]
       },
       alternateRowStyles: {
-        fillColor: [248, 250, 252] // Light subtle alternate row background
+        fillColor: [248, 250, 252]
       },
       headStyles: {
-        fillColor: [226, 232, 240], // Distinct light grey header fill
-        textColor: [15, 23, 42], // Strong dark text for headers
+        fillColor: [226, 232, 240],
+        textColor: [15, 23, 42],
         fontStyle: "bold",
         halign: "right"
       },
@@ -550,10 +621,10 @@ function generatePDF() {
         if (data.section === "body" && data.column.index === 7) {
           const rawText = data.cell.raw;
           if (rawText.startsWith("+")) {
-            data.cell.styles.textColor = [0, 150, 100]; // Bold readable green
+            data.cell.styles.textColor = [0, 150, 100];
             data.cell.styles.fontStyle = "bold";
           } else if (rawText.startsWith("−") || rawText.startsWith("-")) {
-            data.cell.styles.textColor = [220, 38, 38]; // Bold readable red
+            data.cell.styles.textColor = [220, 38, 38];
             data.cell.styles.fontStyle = "bold";
           }
         }
@@ -594,7 +665,9 @@ $("clearBtn").addEventListener("click", () => {
   clearStatus();
   noticeEl.classList.add("hidden");
   bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">Enter a valid wallet address to display trade history.</td></tr>';
+  monthlyBodyEl.innerHTML = '<tr class="empty-row"><td colspan="6">Enter a valid wallet address to view monthly breakdown.</td></tr>';
   tableMeta.textContent = "No data loaded.";
+  monthlyMeta.textContent = "No data loaded.";
   resetMetrics();
 });
 
