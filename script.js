@@ -241,7 +241,12 @@ function resetMetrics() {
 
 function updateMetrics() {
   const closedPnl = fills.reduce((s, f) => s + num(f.closedPnl), 0);
-  const fees = fills.reduce((s, f) => s + num(f.fee), 0);
+  
+  // Sum up all types of fees combined (trading, funding, builder fees)
+  const fees = fills.reduce((s, f) => {
+    return s + num(f.fee) + num(f.funding) + num(f.builderFee);
+  }, 0);
+
   const netPnl = closedPnl - fees;
 
   setMetric("mPnl", money(closedPnl, 2), closedPnl);
@@ -285,7 +290,7 @@ function renderMonthlyPnl() {
     }
 
     monthlyMap[yearMonthKey].closedPnl += num(f.closedPnl);
-    monthlyMap[yearMonthKey].fees += num(f.fee);
+    monthlyMap[yearMonthKey].fees += num(f.fee) + num(f.funding) + num(f.builderFee);
     monthlyMap[yearMonthKey].volume += Math.abs(num(f.px) * num(f.sz));
     monthlyMap[yearMonthKey].fillsCount += 1;
   });
@@ -482,7 +487,7 @@ function generatePDF() {
     const wallet = walletEl.value.trim();
     const filterLabel = pnlFilterSelect.options[pnlFilterSelect.selectedIndex].text;
     const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
-    const totalFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
+    const totalFees = targetFills.reduce((s, f) => s + num(f.fee) + num(f.funding) + num(f.builderFee), 0);
     const netPnl = totalPnl - totalFees;
     const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
