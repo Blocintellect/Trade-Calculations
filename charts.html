@@ -18,7 +18,7 @@
       <div class="brand-title">
         <div class="logo-badge"><span class="logo-dot"></span> HYPERLIQUID PRO</div>
         <h1>Performance Growth Analytics</h1>
-        <p class="subtitle">Institutional-grade cumulative net equity and performance curve visualization.</p>
+        <p class="subtitle">Institutional-grade cumulative net equity and performance auditing.</p>
       </div>
       <div class="header-right">
         <a href="index.html" class="secondary" style="text-decoration: none; display: flex; align-items: center; padding: 0 14px; height: 40px; font-weight: 700;">← Back to Statement</a>
@@ -36,7 +36,7 @@
       </div>
       <div class="actions-row">
         <div class="main-btns" style="width: 100%;">
-          <button id="loadChartsBtn" class="btn-primary" style="width: 100%;">Render Performance Curve</button>
+          <button id="loadChartsBtn" class="btn-primary" style="width: 100%;">Render Performance Curve & Audit</button>
         </div>
       </div>
       <div id="status" class="status hidden"></div>
@@ -76,11 +76,40 @@
       <div class="table-header" style="padding: 0 0 14px 0; border-bottom: 1px solid var(--panel-border); margin-bottom: 16px;">
         <div class="table-header-info">
           <h2>Cumulative Net P&L Growth Curve</h2>
-          <p class="meta-info">Net realized profit and loss minus all trading and funding fees compounded chronologically.</p>
+          <p class="meta-info">Net realized profit minus all trading, funding, and builder fees compounded chronologically.</p>
         </div>
       </div>
-      <div style="position: relative; height: 420px; width: 100%;">
+      <div style="position: relative; height: 380px; width: 100%;">
         <canvas id="pnlLineChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Detailed Tabulated Performance Breakdown Table -->
+    <section class="panel table-panel">
+      <div class="table-header">
+        <div class="table-header-info">
+          <h2>Periodic Performance Breakdown</h2>
+          <p id="tableMeta" class="meta-info">Aggregated period-by-period financial audit ledger.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="coinglass-table">
+          <thead>
+            <tr>
+              <th style="text-align: left;">PERIOD</th>
+              <th>CLOSED P&L</th>
+              <th>TOTAL FEES</th>
+              <th>NET P&L</th>
+              <th>VOLUME</th>
+              <th>FILLS COUNT</th>
+            </tr>
+          </thead>
+          <tbody id="periodTableBody">
+            <tr class="empty-row">
+              <td colspan="6">Load a wallet address above to generate detailed periodic audit tables.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 

@@ -44,6 +44,9 @@ const rowsPerPage = 50;
 // Local Storage Keys
 const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
 const SAVED_THEME_KEY = "hyperliquid_theme";
+const CACHE_FILLS_KEY = "hyperliquid_persisted_fills";
+const CACHE_FUNDING_KEY = "hyperliquid_persisted_funding";
+const CACHE_TIME_KEY = "hyperliquid_cache_timestamp";
 
 if (localStorage.getItem(SAVED_WALLET_KEY)) {
   walletEl.value = localStorage.getItem(SAVED_WALLET_KEY);
@@ -169,11 +172,9 @@ async function postInfo(body) {
   return r.json();
 }
 
-// Fetch Fills and Funding History Concurrently
 async function fetchAccountData(user, startMs, endMs) {
   const cleanUser = user.toLowerCase().trim();
   
-  // 1. Fetch Fills
   const fillsPromise = (async () => {
     const out = [], seen = new Set(), week = 7 * 86400000;
     let ws = startMs, limited = false;
@@ -215,7 +216,6 @@ async function fetchAccountData(user, startMs, endMs) {
     return { result: out, reachedGlobalLimit: limited };
   })();
 
-  // 2. Fetch Funding History Ledger Payments
   const fundingPromise = (async () => {
     try {
       const fundingData = await postInfo({
@@ -224,9 +224,7 @@ async function fetchAccountData(user, startMs, endMs) {
         startTime: startMs,
         endTime: endMs
       });
-      if (Array.isArray(fundingData)) {
-        return fundingData;
-      }
+      if (Array.isArray(fundingData)) return fundingData;
     } catch (e) {
       console.warn("Funding history fetch warning:", e);
     }
@@ -285,21 +283,15 @@ function resetMetrics() {
 
 function updateMetrics() {
   const closedPnl = fills.reduce((s, f) => s + num(f.closedPnl), 0);
-  
   const tradingFees = fills.reduce((s, f) => s + num(f.fee), 0);
-  
-  // Aggregate funding payments from userFunding ledger
   const totalFundingPaid = fundingHistory.reduce((s, item) => {
     const usdPayment = num(item.delta?.usdc);
     return s + (usdPayment < 0 ? Math.abs(usdPayment) : 0);
   }, 0);
-
   const builderFees = fills.reduce((s, f) => s + num(f.builderFee), 0);
   const totalFees = tradingFees + totalFundingPaid + builderFees;
-
   const netPnl = closedPnl - totalFees;
 
-  // Update Modal Sub-items
   $("modalTradingFee").textContent = plainMoney(tradingFees, 4);
   $("modalFundingFee").textContent = plainMoney(totalFundingPaid, 4);
   $("modalBuilderFee").textContent = plainMoney(builderFees, 4);
@@ -308,9 +300,7 @@ function updateMetrics() {
   const tradesWithPnl = fills.filter(f => num(f.closedPnl) !== 0);
   const winningTrades = tradesWithPnl.filter(f => num(f.closedPnl) > 0);
   const losingTrades = tradesWithPnl.filter(f => num(f.closedPnl) < 0);
-  
   const winRate = tradesWithPnl.length > 0 ? (winningTrades.length / tradesWithPnl.length) * 100 : 0;
-  
   const grossProfit = winningTrades.reduce((s, f) => s + num(f.closedPnl), 0);
   const grossLoss = Math.abs(losingTrades.reduce((s, f) => s + num(f.closedPnl), 0));
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99.9 : 0;
@@ -366,7 +356,6 @@ function renderMonthlyPnl() {
     monthlyMap[yearMonthKey].fillsCount += 1;
   });
 
-  // Account for monthly funding history ledger payments
   fundingHistory.forEach(item => {
     const timeVal = item.time || item.delta?.time;
     if (!timeVal) return;
@@ -379,9 +368,7 @@ function renderMonthlyPnl() {
     }
 
     const usdPayment = num(item.delta?.usdc);
-    if (usdPayment < 0) {
-      monthlyMap[yearMonthKey].fees += Math.abs(usdPayment);
-    }
+    if (usdPayment < 0) monthlyMap[yearMonthKey].fees += Math.abs(usdPayment);
   });
 
   const sortedKeys = Object.keys(monthlyMap).sort().reverse();
@@ -461,6 +448,37 @@ function renderTrades() {
   renderMonthlyPnl();
 }
 
+// Auto-load persisted data on start with 2-hour expiration wipe check
+window.addEventListener("DOMContentLoaded", () => {
+  const cacheTime = Number(localStorage.getItem(CACHE_TIME_KEY) || 0);
+  const isExpired = (Date.now() - cacheTime) > 7200000; // 2 hours expiration
+
+  if (isExpired) {
+    localStorage.removeItem(CACHE_FILLS_KEY);
+    localStorage.removeItem(CACHE_FUNDING_KEY);
+    localStorage.removeItem(CACHE_TIME_KEY);
+    sessionStorage.clear();
+    return;
+  }
+
+  const savedFills = localStorage.getItem(CACHE_FILLS_KEY);
+  const savedFunding = localStorage.getItem(CACHE_FUNDING_KEY);
+
+  if (savedFills) {
+    try {
+      fills = JSON.parse(savedFills);
+      fundingHistory = savedFunding ? JSON.parse(savedFunding) : [];
+      if (fills.length > 0) {
+        updateCoinFilterOptions();
+        renderTrades();
+        setStatus(`Loaded ${fills.length.toLocaleString()} persisted fill(s) from local storage.`, "success");
+      }
+    } catch (e) {
+      console.warn("Failed to load persisted storage data:", e);
+    }
+  }
+});
+
 pnlFilterSelect.addEventListener("change", () => { currentPage = 1; renderTrades(); });
 coinFilterSelect.addEventListener("change", () => { currentPage = 1; renderTrades(); });
 
@@ -503,6 +521,14 @@ fetchBtn.addEventListener("click", async () => {
     fills = accountData.fills;
     fundingHistory = accountData.funding;
 
+    // Save with timestamp for 2-hour expiration wipe policy
+    localStorage.setItem(CACHE_FILLS_KEY, JSON.stringify(fills));
+    localStorage.setItem(CACHE_FUNDING_KEY, JSON.stringify(fundingHistory));
+    localStorage.setItem(CACHE_TIME_KEY, Date.now());
+
+    sessionStorage.setItem("hl_cached_fills", JSON.stringify(fills));
+    sessionStorage.setItem("hl_cached_funding", JSON.stringify(fundingHistory));
+
     updateCoinFilterOptions();
     renderTrades();
 
@@ -511,7 +537,7 @@ fetchBtn.addEventListener("click", async () => {
       noticeEl.classList.remove("hidden");
     }
 
-    setStatus(`Loaded ${fills.length.toLocaleString()} fill(s) and ${fundingHistory.length.toLocaleString()} funding payment record(s).`, "success");
+    setStatus(`Loaded ${fills.length.toLocaleString()} fill(s) and ${fundingHistory.length.toLocaleString()} funding record(s).`, "success");
   } catch (err) {
     console.error(err);
     setStatus("Error fetching data: " + (err?.message || "Check network connection or wallet address."), "error");
@@ -519,6 +545,34 @@ fetchBtn.addEventListener("click", async () => {
     fetchBtn.disabled = false;
   }
 });
+
+// Background 1-hour silent auto-refresh timer
+setInterval(async () => {
+  const wallet = walletEl.value.trim();
+  if (isAddress(wallet) && !fetchBtn.disabled) {
+    console.log("Running scheduled 1-hour background data refresh...");
+    try {
+      const s = msStart(startEl.value), e = msEnd(endEl.value);
+      const accountData = await fetchAccountData(wallet, s, e);
+      fills = accountData.fills;
+      fundingHistory = accountData.funding;
+
+      localStorage.setItem(CACHE_FILLS_KEY, JSON.stringify(fills));
+      localStorage.setItem(CACHE_FUNDING_KEY, JSON.stringify(fundingHistory));
+      localStorage.setItem(CACHE_TIME_KEY, Date.now());
+
+      sessionStorage.setItem("hl_cached_fills", JSON.stringify(fills));
+      sessionStorage.setItem("hl_cached_funding", JSON.stringify(fundingHistory));
+
+      updateCoinFilterOptions();
+      renderTrades();
+      
+      setStatus(`Auto-refreshed: Loaded ${fills.length.toLocaleString()} fill(s) at ${new Date().toLocaleTimeString()}`, "success");
+    } catch (err) {
+      console.warn("Background auto-refresh failed:", err);
+    }
+  }
+}, 3600000);
 
 function csvEscape(v) {
   const s = String(v ?? "");
@@ -591,7 +645,6 @@ function generatePDF() {
 
     const wallet = walletEl.value.trim();
     const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
-    
     const tradingFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
     const totalFundingPaid = fundingHistory.reduce((s, item) => {
       const usdPayment = num(item.delta?.usdc);
@@ -599,7 +652,6 @@ function generatePDF() {
     }, 0);
     const builderFees = targetFills.reduce((s, f) => s + num(f.builderFee), 0);
     const totalFees = tradingFees + totalFundingPaid + builderFees;
-
     const netPnl = totalPnl - totalFees;
     const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
@@ -622,16 +674,13 @@ function generatePDF() {
     const cardGap = 13;
     let cardX = 40;
 
-    // Card 1: NET P&L
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
     doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100);
     doc.text("NET P&L", cardX + 10, 82);
     doc.setFontSize(10); doc.setTextColor(netPnl >= 0 ? 100 : 220, netPnl >= 0 ? 150 : 38, netPnl >= 0 ? 100 : 38);
     doc.text(money(netPnl, 2), cardX + 10, 100);
 
-    // Card 2: CLOSED P&L
     cardX += cardWidth + cardGap;
     doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
@@ -640,7 +689,6 @@ function generatePDF() {
     doc.setFontSize(10); doc.setTextColor(totalPnl >= 0 ? 100 : 220, totalPnl >= 0 ? 150 : 38, totalPnl >= 0 ? 100 : 38);
     doc.text(money(totalPnl, 2), cardX + 10, 100);
 
-    // Card 3: TOTAL FEES
     cardX += cardWidth + cardGap;
     doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
@@ -649,7 +697,6 @@ function generatePDF() {
     doc.setFontSize(10); doc.setTextColor(15, 23, 42);
     doc.text(plainMoney(totalFees, 2), cardX + 10, 100);
 
-    // Card 4: TOTAL VOLUME
     cardX += cardWidth + cardGap;
     doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
@@ -658,7 +705,6 @@ function generatePDF() {
     doc.setFontSize(10); doc.setTextColor(15, 23, 42);
     doc.text(plainMoney(totalVol, 2), cardX + 10, 100);
 
-    // Card 5: TOTAL TRADES
     cardX += cardWidth + cardGap;
     doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
@@ -719,6 +765,10 @@ allBtn.addEventListener("click", () => setPreset("30"));
 $("clearBtn").addEventListener("click", () => {
   walletEl.value = "";
   localStorage.removeItem(SAVED_WALLET_KEY);
+  localStorage.removeItem(CACHE_FILLS_KEY);
+  localStorage.removeItem(CACHE_FUNDING_KEY);
+  localStorage.removeItem(CACHE_TIME_KEY);
+  sessionStorage.clear();
   setPreset("30");
   fills = [];
   fundingHistory = [];

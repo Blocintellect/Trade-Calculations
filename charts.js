@@ -8,6 +8,10 @@ const walletEl = $("wallet"),
 let pnlChartInstance = null;
 
 const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
+const CACHE_FILLS_KEY = "hyperliquid_persisted_fills";
+const CACHE_FUNDING_KEY = "hyperliquid_persisted_funding";
+const CACHE_TIME_KEY = "hyperliquid_cache_timestamp";
+
 if (localStorage.getItem(SAVED_WALLET_KEY)) {
   walletEl.value = localStorage.getItem(SAVED_WALLET_KEY);
 }
@@ -29,6 +33,9 @@ function money(v, d = 2) {
 }
 function plainMoney(v, d = 2) {
   return "$" + num(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 async function postInfo(body) {
@@ -73,7 +80,7 @@ async function fetchAllData(user) {
     pages++;
   }
 
-  out.sort((a, b) => Number(a.time) - Number(b.time)); // Chronological
+  out.sort((a, b) => Number(a.time) - Number(b.time));
 
   let funding = [];
   try {
@@ -90,6 +97,37 @@ async function fetchAllData(user) {
 
   return { fills: out, funding };
 }
+
+// Auto-load persisted data on startup with 2-hour expiration wipe check
+window.addEventListener("DOMContentLoaded", () => {
+  const cacheTime = Number(localStorage.getItem(CACHE_TIME_KEY) || 0);
+  const isExpired = (Date.now() - cacheTime) > 7200000; // 2 hours expiration
+
+  if (isExpired) {
+    localStorage.removeItem(CACHE_FILLS_KEY);
+    localStorage.removeItem(CACHE_FUNDING_KEY);
+    localStorage.removeItem(CACHE_TIME_KEY);
+    sessionStorage.clear();
+    return;
+  }
+
+  const savedFills = localStorage.getItem(CACHE_FILLS_KEY) || sessionStorage.getItem("hl_cached_fills");
+  const savedFunding = localStorage.getItem(CACHE_FUNDING_KEY) || sessionStorage.getItem("hl_cached_funding");
+
+  if (savedFills) {
+    try {
+      const fillsData = JSON.parse(savedFills);
+      const fundingData = savedFunding ? JSON.parse(savedFunding) : [];
+      
+      if (fillsData.length > 0) {
+        processAndRenderAnalytics(fillsData, fundingData);
+        setStatus(`Loaded ${fillsData.length.toLocaleString()} persisted fill(s) instantly.`, "success");
+      }
+    } catch (e) {
+      console.warn("Error parsing persisted storage data:", e);
+    }
+  }
+});
 
 loadChartsBtn.addEventListener("click", async () => {
   const wallet = walletEl.value.trim();
@@ -109,6 +147,14 @@ loadChartsBtn.addEventListener("click", async () => {
       return;
     }
 
+    // Save with current timestamp for 2-hour wipe expiration policy
+    localStorage.setItem(CACHE_FILLS_KEY, JSON.stringify(accountData.fills));
+    localStorage.setItem(CACHE_FUNDING_KEY, JSON.stringify(accountData.funding));
+    localStorage.setItem(CACHE_TIME_KEY, Date.now());
+    
+    sessionStorage.setItem("hl_cached_fills", JSON.stringify(accountData.fills));
+    sessionStorage.setItem("hl_cached_funding", JSON.stringify(accountData.funding));
+
     processAndRenderAnalytics(accountData.fills, accountData.funding);
     setStatus(`Successfully generated analytics curve using ${accountData.fills.length.toLocaleString()} trade fill(s).`, "success");
   } catch (err) {
@@ -127,14 +173,23 @@ function processAndRenderAnalytics(fills, funding) {
     const dateKey = d.toISOString().split("T")[0];
 
     if (!dailyMap[dateKey]) {
-      dailyMap[dateKey] = { netPnl: 0, wins: 0, losses: 0, totalTrades: 0 };
+      dailyMap[dateKey] = { closedPnl: 0, fees: 0, netPnl: 0, volume: 0, wins: 0, losses: 0, totalTrades: 0 };
     }
 
-    const pnl = num(f.closedPnl) - num(f.fee) - num(f.builderFee);
-    dailyMap[dateKey].netPnl += pnl;
+    const closedPnl = num(f.closedPnl);
+    const tradingFee = num(f.fee);
+    const builderFee = num(f.builderFee);
+    const netTradePnl = closedPnl - tradingFee - builderFee;
+    const notionalVol = Math.abs(num(f.px) * num(f.sz));
+
+    dailyMap[dateKey].closedPnl += closedPnl;
+    dailyMap[dateKey].fees += (tradingFee + builderFee);
+    dailyMap[dateKey].netPnl += netTradePnl;
+    dailyMap[dateKey].volume += notionalVol;
     dailyMap[dateKey].totalTrades += 1;
-    if (num(f.closedPnl) > 0) dailyMap[dateKey].wins += 1;
-    if (num(f.closedPnl) < 0) dailyMap[dateKey].losses += 1;
+
+    if (closedPnl > 0) dailyMap[dateKey].wins += 1;
+    if (closedPnl < 0) dailyMap[dateKey].losses += 1;
   });
 
   funding.forEach(item => {
@@ -145,10 +200,13 @@ function processAndRenderAnalytics(fills, funding) {
     const usdPayment = num(item.delta?.usdc);
 
     if (!dailyMap[dateKey]) {
-      dailyMap[dateKey] = { netPnl: 0, wins: 0, losses: 0, totalTrades: 0 };
+      dailyMap[dateKey] = { closedPnl: 0, fees: 0, netPnl: 0, volume: 0, wins: 0, losses: 0, totalTrades: 0 };
     }
+
     if (usdPayment < 0) {
-      dailyMap[dateKey].netPnl -= Math.abs(usdPayment);
+      const paid = Math.abs(usdPayment);
+      dailyMap[dateKey].fees += paid;
+      dailyMap[dateKey].netPnl -= paid;
     } else {
       dailyMap[dateKey].netPnl += usdPayment;
     }
@@ -187,6 +245,8 @@ function processAndRenderAnalytics(fills, funding) {
   $("statWinLoss").textContent = `${winLossRatio} (${totalWins}W / ${totalLosses}L)`;
   $("statAvgTrade").textContent = money(avgTradeExpectancy, 2);
   $("statDays").textContent = dates.length.toLocaleString();
+
+  renderPeriodicTable(dailyMap);
 
   if (pnlChartInstance) pnlChartInstance.destroy();
 
@@ -242,4 +302,48 @@ function processAndRenderAnalytics(fills, funding) {
       }
     }
   });
+}
+
+function renderPeriodicTable(dailyMap) {
+  const periodBody = $("periodTableBody");
+  const sortedDates = Object.keys(dailyMap).sort().reverse();
+
+  if (!sortedDates.length) {
+    periodBody.innerHTML = '<tr class="empty-row"><td colspan="6">No trading data available for periodic table.</td></tr>';
+    return;
+  }
+
+  const monthlyAgg = {};
+  sortedDates.forEach(dateStr => {
+    const d = new Date(dateStr);
+    const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const mLabel = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+    if (!monthlyAgg[mKey]) {
+      monthlyAgg[mKey] = { label: mLabel, closedPnl: 0, fees: 0, netPnl: 0, volume: 0, fills: 0 };
+    }
+
+    const dayObj = dailyMap[dateStr];
+    monthlyAgg[mKey].closedPnl += dayObj.closedPnl || 0;
+    monthlyAgg[mKey].fees += dayObj.fees || 0;
+    monthlyAgg[mKey].netPnl += dayObj.netPnl || 0;
+    monthlyAgg[mKey].volume += dayObj.volume || 0;
+    monthlyAgg[mKey].fills += dayObj.totalTrades || 0;
+  });
+
+  const sortedMonths = Object.keys(monthlyAgg).sort().reverse();
+
+  periodBody.innerHTML = sortedMonths.map(k => {
+    const row = monthlyAgg[k];
+    return `<tr>
+      <td style="text-align: left; font-weight: 800;">${esc(row.label)}</td>
+      <td class="${row.closedPnl > 0 ? "text-positive" : row.closedPnl < 0 ? "text-negative" : ""}">${money(row.closedPnl, 2)}</td>
+      <td>${plainMoney(row.fees, 2)}</td>
+      <td class="${row.netPnl > 0 ? "text-positive" : row.netPnl < 0 ? "text-negative" : ""}">${money(row.netPnl, 2)}</td>
+      <td>${plainMoney(row.volume, 2)}</td>
+      <td>${row.fills.toLocaleString()}</td>
+    </tr>`;
+  }).join("");
+
+  $("tableMeta").textContent = `Displaying performance across ${sortedMonths.length} active month(s).`;
 }
