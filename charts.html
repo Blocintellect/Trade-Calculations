@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hyperliquid Analytics | Performance & Growth Charts</title>
+  
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/4807/4807923.png">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dark-theme">
+  <div class="app">
+    <!-- Header / Topbar -->
+    <header class="topbar">
+      <div class="brand-title">
+        <div class="logo-badge"><span class="logo-dot"></span> HYPERLIQUID PRO</div>
+        <h1>Performance Growth Analytics</h1>
+        <p class="subtitle">Institutional-grade cumulative net equity and performance curve visualization.</p>
+      </div>
+      <div class="header-right">
+        <a href="index.html" class="secondary" style="text-decoration: none; display: flex; align-items: center; padding: 0 14px; height: 40px; font-weight: 700;">← Back to Statement</a>
+        <div class="security-tag"><span class="icon">🔒</span> PUBLIC ADDRESS</div>
+      </div>
+    </header>
+
+    <!-- Controls Panel -->
+    <section class="panel controls">
+      <div class="control-row">
+        <div class="field wallet-field" style="grid-column: span 3;">
+          <label for="wallet">QUICK LOAD WALLET ADDRESS</label>
+          <input id="wallet" type="text" autocomplete="off" spellcheck="false" placeholder="0x1234...abcd">
+        </div>
+      </div>
+      <div class="actions-row">
+        <div class="main-btns" style="width: 100%;">
+          <button id="loadChartsBtn" class="btn-primary" style="width: 100%;">Render Performance Curve</button>
+        </div>
+      </div>
+      <div id="status" class="status hidden"></div>
+    </section>
+
+    <!-- Summarized Analytics Insight Cards Grid -->
+    <section class="metrics-grid" style="margin-bottom: 16px;">
+      <div class="metric-card">
+        <span class="label">PEAK CUMULATIVE P&L</span>
+        <strong id="statPeak" class="value">—</strong>
+        <span class="subtext">Highest equity watermark</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">MAX DRAWDOWN</span>
+        <strong id="statMaxDD" class="value">—</strong>
+        <span class="subtext">Peak-to-trough drop</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">WIN / LOSS RATIO</span>
+        <strong id="statWinLoss" class="value">—</strong>
+        <span class="subtext">Profitable vs Losing Fills</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">AVG TRADE NET P&L</span>
+        <strong id="statAvgTrade" class="value">—</strong>
+        <span class="subtext">Expectancy per fill</span>
+      </div>
+      <div class="metric-card">
+        <span class="label">TOTAL DAYS TRACKED</span>
+        <strong id="statDays" class="value">—</strong>
+        <span class="subtext">Active trading span</span>
+      </div>
+    </section>
+
+    <!-- Main Cumulative P&L Progress Chart Panel -->
+    <section class="panel table-panel" style="padding: 20px; margin-bottom: 20px;">
+      <div class="table-header" style="padding: 0 0 14px 0; border-bottom: 1px solid var(--panel-border); margin-bottom: 16px;">
+        <div class="table-header-info">
+          <h2>Cumulative Net P&L Growth Curve</h2>
+          <p class="meta-info">Net realized profit and loss minus all trading and funding fees compounded chronologically.</p>
+        </div>
+      </div>
+      <div style="position: relative; height: 420px; width: 100%;">
+        <canvas id="pnlLineChart"></canvas>
+      </div>
+    </section>
+
+    <footer class="coinglass-footer">
+      <span>Data Provider: Hyperliquid Public Info API</span>
+      <span>Eskandar Atrakchi Theme • Non-custodial Analytics</span>
+    </footer>
+  </div>
+
+  <script src="charts.js"></script>
+</body>
+</html>
