@@ -1,3 +1,4 @@
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -71,29 +72,46 @@
       <div class="metric-card">
         <span class="label">NET P&L</span>
         <strong id="mNet" class="value">—</strong>
-        <span class="subtext">Closed PnL - Fees</span>
+        <span class="subtext">Closed PnL - Total Fees</span>
       </div>
       <div class="metric-card">
         <span class="label">CLOSED P&L</span>
         <strong id="mPnl" class="value">—</strong>
         <span class="subtext">Realized trades</span>
       </div>
-      <div class="metric-card">
-        <span class="label">TOTAL FEES</span>
+      <div class="metric-card interactive-card" id="feeCard" title="Click to view full fee breakdown">
+        <span class="label">TOTAL FEES ⓘ</span>
         <strong id="mFees" class="value">—</strong>
-        <span class="subtext">Trading, funding & builder fees</span>
+        <span class="subtext">Trading, funding & builder</span>
       </div>
       <div class="metric-card">
-        <span class="label">TOTAL VOLUME</span>
-        <strong id="mVolume" class="value">—</strong>
-        <span class="subtext">Notional turnover</span>
+        <span class="label">WIN RATE</span>
+        <strong id="mWinRate" class="value">—</strong>
+        <span class="subtext">Profitable fills</span>
       </div>
       <div class="metric-card">
-        <span class="label">TOTAL FILLS</span>
-        <strong id="mFills" class="value">—</strong>
-        <span class="subtext">Executed orders</span>
+        <span class="label">PROFIT FACTOR</span>
+        <strong id="mProfitFactor" class="value">—</strong>
+        <span class="subtext">Gross Win / Loss</span>
       </div>
     </section>
+
+    <!-- Fee Breakdown Modal (Hidden by default) -->
+    <div id="feeModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Detailed Fee Audit Breakdown</h3>
+          <button id="closeModalBtn" class="btn-ghost">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="fee-row"><span>Trading Commissions (Taker/Maker):</span> <strong id="modalTradingFee">$0.00</strong></div>
+          <div class="fee-row"><span>Funding Payments:</span> <strong id="modalFundingFee">$0.00</strong></div>
+          <div class="fee-row"><span>Builder Fees:</span> <strong id="modalBuilderFee">$0.00</strong></div>
+          <hr class="modal-divider">
+          <div class="fee-row total"><span>Total Combined Fees:</span> <strong id="modalTotalFee">$0.00</strong></div>
+        </div>
+      </div>
+    </div>
 
     <!-- View Toggle Tabs -->
     <div class="view-tabs">
@@ -109,6 +127,12 @@
           <p id="tableMeta" class="meta-info">No trade data loaded.</p>
         </div>
         <div class="filter-export-container">
+          <div class="filter-dropdown-field">
+            <label for="coinFilterSelect">ASSET:</label>
+            <select id="coinFilterSelect">
+              <option value="all">All Coins</option>
+            </select>
+          </div>
           <div class="filter-dropdown-field">
             <label for="pnlFilterSelect">FILTER P&L:</label>
             <select id="pnlFilterSelect">
@@ -137,18 +161,25 @@
               <th>NOTIONAL</th>
               <th>CLOSED P&L</th>
               <th>FEE</th>
+              <th>FUNDING</th>
+              <th>BUILDER</th>
               <th>FEE TOKEN</th>
               <th>ORDER ID</th>
-              <th>TRADE ID</th>
               <th>HASH</th>
             </tr>
           </thead>
           <tbody id="tradeBody">
             <tr class="empty-row">
-              <td colspan="13">Enter a valid wallet address to display trade history.</td>
+              <td colspan="14">Enter a valid wallet address to display trade history.</td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <!-- Pagination Controls -->
+      <div id="paginationContainer" class="pagination-container hidden">
+        <button id="prevPageBtn" class="secondary" disabled>← Previous</button>
+        <span id="pageIndicator" class="page-indicator">Page 1 of 1</span>
+        <button id="nextPageBtn" class="secondary" disabled>Next →</button>
       </div>
     </section>
 

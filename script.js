@@ -20,15 +20,26 @@ const walletEl = $("wallet"),
       ytdBtn = $("ytdBtn"),
       todayBtn = $("todayBtn"),
       pnlFilterSelect = $("pnlFilterSelect"),
+      coinFilterSelect = $("coinFilterSelect"),
       themeToggleBtn = $("themeToggleBtn"),
       themeIcon = $("themeIcon"),
       themeLabel = $("themeLabel"),
       tabTradesBtn = $("tabTradesBtn"),
       tabMonthlyBtn = $("tabMonthlyBtn"),
       panelTrades = $("panelTrades"),
-      panelMonthly = $("panelMonthly");
+      panelMonthly = $("panelMonthly"),
+      feeCard = $("feeCard"),
+      feeModal = $("feeModal"),
+      closeModalBtn = $("closeModalBtn"),
+      prevPageBtn = $("prevPageBtn"),
+      nextPageBtn = $("nextPageBtn"),
+      pageIndicator = $("pageIndicator"),
+      paginationContainer = $("paginationContainer");
 
 let fills = [];
+let fundingHistory = [];
+let currentPage = 1;
+const rowsPerPage = 50;
 
 // Local Storage Keys
 const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
@@ -41,6 +52,11 @@ if (localStorage.getItem(SAVED_WALLET_KEY)) {
 walletEl.addEventListener("input", () => {
   localStorage.setItem(SAVED_WALLET_KEY, walletEl.value.trim());
 });
+
+// Modal Logic
+feeCard.addEventListener("click", () => feeModal.classList.remove("hidden"));
+closeModalBtn.addEventListener("click", () => feeModal.classList.add("hidden"));
+window.addEventListener("click", e => { if (e.target === feeModal) feeModal.classList.add("hidden"); });
 
 // Tab Switching Logic
 tabTradesBtn.addEventListener("click", () => {
@@ -58,7 +74,6 @@ tabMonthlyBtn.addEventListener("click", () => {
   renderMonthlyPnl();
 });
 
-// Map side code (B -> Buy, A -> Sell)
 function mapSide(side) {
   if (!side) return "";
   const s = String(side).toUpperCase();
@@ -154,48 +169,76 @@ async function postInfo(body) {
   return r.json();
 }
 
-// Fetch Trades
-async function fetchFillsByTime(user, startMs, endMs) {
+// Fetch Fills and Funding History Concurrently
+async function fetchAccountData(user, startMs, endMs) {
   const cleanUser = user.toLowerCase().trim();
-  const out = [], seen = new Set(), week = 7 * 86400000;
-  let ws = startMs, limited = false;
+  
+  // 1. Fetch Fills
+  const fillsPromise = (async () => {
+    const out = [], seen = new Set(), week = 7 * 86400000;
+    let ws = startMs, limited = false;
 
-  while (ws <= endMs) {
-    const we = Math.min(ws + week - 1, endMs);
-    let cursor = ws, pages = 0;
+    while (ws <= endMs) {
+      const we = Math.min(ws + week - 1, endMs);
+      let cursor = ws, pages = 0;
 
-    while (cursor <= we) {
-      const data = await postInfo({
-        type: "userFillsByTime",
-        user: cleanUser,
-        startTime: cursor,
-        endTime: we,
-        aggregateByTime: false
-      });
+      while (cursor <= we) {
+        const data = await postInfo({
+          type: "userFillsByTime",
+          user: cleanUser,
+          startTime: cursor,
+          endTime: we,
+          aggregateByTime: false
+        });
 
-      if (!Array.isArray(data)) throw new Error("Invalid response format.");
+        if (!Array.isArray(data)) throw new Error("Invalid fills response format.");
 
-      for (const f of data) {
-        const key = [f.tid ?? "", f.hash ?? "", f.oid ?? "", f.time ?? "", f.coin ?? "", f.px ?? "", f.sz ?? ""].join("|");
-        if (!seen.has(key)) {
-          seen.add(key);
-          out.push(f);
+        for (const f of data) {
+          const key = [f.tid ?? "", f.hash ?? "", f.oid ?? "", f.time ?? "", f.coin ?? "", f.px ?? "", f.sz ?? ""].join("|");
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push(f);
+          }
         }
+
+        pages++;
+        if (data.length < 2000) break;
+        const lt = Number(data.at(-1)?.time);
+        if (!Number.isFinite(lt) || lt < cursor) break;
+        cursor = lt + 1;
+        if (pages >= 10) { limited = true; break; }
       }
-
-      pages++;
-      if (data.length < 2000) break;
-      const lt = Number(data.at(-1)?.time);
-      if (!Number.isFinite(lt) || lt < cursor) break;
-      cursor = lt + 1;
-      if (pages >= 10) { limited = true; break; }
+      if (limited) break;
+      ws = we + 1;
     }
-    if (limited) break;
-    ws = we + 1;
-  }
+    out.sort((a, b) => Number(b.time) - Number(a.time));
+    return { result: out, reachedGlobalLimit: limited };
+  })();
 
-  out.sort((a, b) => Number(b.time) - Number(a.time));
-  return { result: out, reachedGlobalLimit: limited };
+  // 2. Fetch Funding History Ledger Payments
+  const fundingPromise = (async () => {
+    try {
+      const fundingData = await postInfo({
+        type: "userFunding",
+        user: cleanUser,
+        startTime: startMs,
+        endTime: endMs
+      });
+      if (Array.isArray(fundingData)) {
+        return fundingData;
+      }
+    } catch (e) {
+      console.warn("Funding history fetch warning:", e);
+    }
+    return [];
+  })();
+
+  const [fillsRes, fundingRes] = await Promise.all([fillsPromise, fundingPromise]);
+  return {
+    fills: fillsRes.result,
+    funding: fundingRes,
+    reachedGlobalLimit: fillsRes.reachedGlobalLimit
+  };
 }
 
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
@@ -231,42 +274,76 @@ function setMetric(id, value, s = null) {
 }
 
 function resetMetrics() {
-  ["mFills", "mPnl", "mFees", "mNet", "mVolume"].forEach(id => {
+  ["mFills", "mPnl", "mFees", "mNet", "mWinRate", "mProfitFactor"].forEach(id => {
     setMetric(id, "—");
   });
   csvBtn.disabled = true;
   jsonBtn.disabled = true;
   pdfBtn.disabled = true;
+  paginationContainer.classList.add("hidden");
 }
 
 function updateMetrics() {
   const closedPnl = fills.reduce((s, f) => s + num(f.closedPnl), 0);
   
-  // Sum up all types of fees combined (trading, funding, builder fees)
-  const fees = fills.reduce((s, f) => {
-    return s + num(f.fee) + num(f.funding) + num(f.builderFee);
+  const tradingFees = fills.reduce((s, f) => s + num(f.fee), 0);
+  
+  // Aggregate funding payments from userFunding ledger
+  const totalFundingPaid = fundingHistory.reduce((s, item) => {
+    const usdPayment = num(item.delta?.usdc);
+    return s + (usdPayment < 0 ? Math.abs(usdPayment) : 0);
   }, 0);
 
-  const netPnl = closedPnl - fees;
+  const builderFees = fills.reduce((s, f) => s + num(f.builderFee), 0);
+  const totalFees = tradingFees + totalFundingPaid + builderFees;
+
+  const netPnl = closedPnl - totalFees;
+
+  // Update Modal Sub-items
+  $("modalTradingFee").textContent = plainMoney(tradingFees, 4);
+  $("modalFundingFee").textContent = plainMoney(totalFundingPaid, 4);
+  $("modalBuilderFee").textContent = plainMoney(builderFees, 4);
+  $("modalTotalFee").textContent = plainMoney(totalFees, 4);
+
+  const tradesWithPnl = fills.filter(f => num(f.closedPnl) !== 0);
+  const winningTrades = tradesWithPnl.filter(f => num(f.closedPnl) > 0);
+  const losingTrades = tradesWithPnl.filter(f => num(f.closedPnl) < 0);
+  
+  const winRate = tradesWithPnl.length > 0 ? (winningTrades.length / tradesWithPnl.length) * 100 : 0;
+  
+  const grossProfit = winningTrades.reduce((s, f) => s + num(f.closedPnl), 0);
+  const grossLoss = Math.abs(losingTrades.reduce((s, f) => s + num(f.closedPnl), 0));
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99.9 : 0;
 
   setMetric("mPnl", money(closedPnl, 2), closedPnl);
-  setMetric("mFees", plainMoney(fees, 2));
+  setMetric("mFees", plainMoney(totalFees, 2));
   setMetric("mNet", money(netPnl, 2), netPnl);
+  setMetric("mWinRate", winRate.toFixed(1) + "%", winRate > 50 ? 1 : winRate < 50 ? -1 : 0);
+  setMetric("mProfitFactor", profitFactor === 99.9 ? "∞" : profitFactor.toFixed(2), profitFactor > 1 ? 1 : profitFactor < 1 ? -1 : 0);
+}
+
+function updateCoinFilterOptions() {
+  const coins = [...new Set(fills.map(f => f.coin))].sort();
+  const currentVal = coinFilterSelect.value;
+  coinFilterSelect.innerHTML = '<option value="all">All Coins</option>' + coins.map(c => `<option value="${c}">${c}</option>`).join("");
+  if (coins.includes(currentVal)) coinFilterSelect.value = currentVal;
 }
 
 function getFilteredFills() {
-  const filterVal = pnlFilterSelect.value;
-  if (filterVal === "positive") {
-    return fills.filter(f => num(f.closedPnl) > 0);
-  }
-  if (filterVal === "negative") {
-    return fills.filter(f => num(f.closedPnl) < 0);
-  }
-  return fills;
+  const pnlVal = pnlFilterSelect.value;
+  const coinVal = coinFilterSelect.value;
+
+  return fills.filter(f => {
+    const pnl = num(f.closedPnl);
+    if (pnlVal === "positive" && pnl <= 0) return false;
+    if (pnlVal === "negative" && pnl >= 0) return false;
+    if (coinVal !== "all" && f.coin !== coinVal) return false;
+    return true;
+  });
 }
 
 function renderMonthlyPnl() {
-  if (!fills.length) {
+  if (!fills.length && !fundingHistory.length) {
     monthlyBodyEl.innerHTML = '<tr class="empty-row"><td colspan="6">No trade fills loaded to generate monthly breakdown.</td></tr>';
     monthlyMeta.textContent = "No data loaded.";
     return;
@@ -280,19 +357,31 @@ function renderMonthlyPnl() {
     const label = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
     if (!monthlyMap[yearMonthKey]) {
-      monthlyMap[yearMonthKey] = {
-        label: label,
-        closedPnl: 0,
-        fees: 0,
-        volume: 0,
-        fillsCount: 0
-      };
+      monthlyMap[yearMonthKey] = { label, closedPnl: 0, fees: 0, volume: 0, fillsCount: 0 };
     }
 
     monthlyMap[yearMonthKey].closedPnl += num(f.closedPnl);
-    monthlyMap[yearMonthKey].fees += num(f.fee) + num(f.funding) + num(f.builderFee);
+    monthlyMap[yearMonthKey].fees += num(f.fee) + num(f.builderFee);
     monthlyMap[yearMonthKey].volume += Math.abs(num(f.px) * num(f.sz));
     monthlyMap[yearMonthKey].fillsCount += 1;
+  });
+
+  // Account for monthly funding history ledger payments
+  fundingHistory.forEach(item => {
+    const timeVal = item.time || item.delta?.time;
+    if (!timeVal) return;
+    const d = new Date(Number(timeVal));
+    const yearMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+    if (!monthlyMap[yearMonthKey]) {
+      monthlyMap[yearMonthKey] = { label, closedPnl: 0, fees: 0, volume: 0, fillsCount: 0 };
+    }
+
+    const usdPayment = num(item.delta?.usdc);
+    if (usdPayment < 0) {
+      monthlyMap[yearMonthKey].fees += Math.abs(usdPayment);
+    }
   });
 
   const sortedKeys = Object.keys(monthlyMap).sort().reverse();
@@ -317,17 +406,18 @@ function renderTrades() {
   const displayFills = getFilteredFills();
 
   if (!displayFills.length) {
-    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">No trade fills found matching selected criteria.</td></tr>';
+    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="14">No trade fills found matching selected criteria.</td></tr>';
     tableMeta.textContent = "No trade fills to show.";
+    paginationContainer.classList.add("hidden");
     return;
   }
 
-  const vol = displayFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
+  const totalPages = Math.ceil(displayFills.length / rowsPerPage);
+  if (currentPage > totalPages) currentPage = 1;
+  const startIdx = (currentPage - 1) * rowsPerPage;
+  const paginatedFills = displayFills.slice(startIdx, startIdx + rowsPerPage);
 
-  setMetric("mFills", displayFills.length.toLocaleString());
-  setMetric("mVolume", plainMoney(vol, 2));
-
-  bodyEl.innerHTML = displayFills.map(f => {
+  bodyEl.innerHTML = paginatedFills.map(f => {
     const p = num(f.closedPnl);
     const d = String(f.dir ?? "");
     const dc = d.toLowerCase().includes("close") ? "dir-close" : "dir-open";
@@ -335,7 +425,7 @@ function renderTrades() {
     const hasHash = rawHash && rawHash !== "null" && rawHash !== "undefined";
 
     const hashCell = hasHash 
-      ? `<a href="${EXPLORER_URL}${esc(rawHash)}" target="_blank" rel="noopener noreferrer" class="hash" title="View on Hyperliquid Explorer: ${esc(rawHash)}">${esc(rawHash)}</a>`
+      ? `<a href="${EXPLORER_URL}${esc(rawHash)}" target="_blank" rel="noopener noreferrer" class="hash" title="View Explorer">${esc(rawHash)}</a>`
       : '—';
 
     return `<tr>
@@ -348,15 +438,21 @@ function renderTrades() {
       <td>${plainMoney(Math.abs(num(f.px) * num(f.sz)), 2)}</td>
       <td class="${p > 0 ? "text-positive" : p < 0 ? "text-negative" : ""}">${money(p, 4)}</td>
       <td>${plainMoney(f.fee, 4)}</td>
+      <td>${plainMoney(f.funding, 4)}</td>
+      <td>${plainMoney(f.builderFee, 4)}</td>
       <td>${esc(f.feeToken)}</td>
       <td>${esc(f.oid)}</td>
-      <td>${esc(f.tid)}</td>
       <td>${hashCell}</td>
     </tr>`;
   }).join("");
 
-  tableMeta.textContent = `${displayFills.length.toLocaleString()} fills shown • ${formatDate(displayFills.at(-1).time)} → ${formatDate(displayFills[0].time)}`;
+  tableMeta.textContent = `${displayFills.length.toLocaleString()} fills matching filters (Showing ${startIdx + 1}–${Math.min(startIdx + rowsPerPage, displayFills.length)})`;
   
+  pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+  prevPageBtn.disabled = currentPage === 1;
+  nextPageBtn.disabled = currentPage === totalPages;
+  paginationContainer.classList.remove("hidden");
+
   csvBtn.disabled = false;
   jsonBtn.disabled = false;
   pdfBtn.disabled = false;
@@ -365,7 +461,14 @@ function renderTrades() {
   renderMonthlyPnl();
 }
 
-pnlFilterSelect.addEventListener("change", renderTrades);
+pnlFilterSelect.addEventListener("change", () => { currentPage = 1; renderTrades(); });
+coinFilterSelect.addEventListener("change", () => { currentPage = 1; renderTrades(); });
+
+prevPageBtn.addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTrades(); } });
+nextPageBtn.addEventListener("click", () => {
+  const totalPages = Math.ceil(getFilteredFills().length / rowsPerPage);
+  if (currentPage < totalPages) { currentPage++; renderTrades(); }
+});
 
 fetchBtn.addEventListener("click", async () => {
   clearStatus();
@@ -389,22 +492,26 @@ fetchBtn.addEventListener("click", async () => {
 
   fetchBtn.disabled = true;
   fills = [];
+  fundingHistory = [];
+  currentPage = 1;
   resetMetrics();
 
   try {
-    setStatus("Fetching trade statement history from Hyperliquid…");
+    setStatus("Fetching trade statement and funding history from Hyperliquid…");
 
-    const fillsRes = await fetchFillsByTime(wallet, s, e);
-    fills = fillsRes.result;
+    const accountData = await fetchAccountData(wallet, s, e);
+    fills = accountData.fills;
+    fundingHistory = accountData.funding;
 
+    updateCoinFilterOptions();
     renderTrades();
 
-    if (fillsRes.reachedGlobalLimit) {
+    if (accountData.reachedGlobalLimit) {
       noticeEl.textContent = "Hyperliquid API returned maximum fill capacity (10,000). Older fills may be omitted.";
       noticeEl.classList.remove("hidden");
     }
 
-    setStatus(`Loaded ${fills.length.toLocaleString()} trade fill(s).`, "success");
+    setStatus(`Loaded ${fills.length.toLocaleString()} fill(s) and ${fundingHistory.length.toLocaleString()} funding payment record(s).`, "success");
   } catch (err) {
     console.error(err);
     setStatus("Error fetching data: " + (err?.message || "Check network connection or wallet address."), "error");
@@ -429,10 +536,11 @@ function toCSV(rows) {
     ["Size", f => f.sz],
     ["Notional USD", f => Math.abs(num(f.px) * num(f.sz)).toFixed(8)],
     ["Closed P&L", f => f.closedPnl],
-    ["Fee", f => f.fee],
+    ["Trading Fee", f => f.fee],
+    ["Funding Fee", f => f.funding],
+    ["Builder Fee", f => f.builderFee],
     ["Fee Token", f => f.feeToken],
     ["Order ID", f => f.oid],
-    ["Trade ID", f => f.tid],
     ["Hash", f => f.hash]
   ];
   return c.map(x => csvEscape(x[0])).join(",") + "\r\n" +
@@ -453,21 +561,18 @@ function downloadBlob(content, name, type) {
 csvBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
-    const filterSuffix = pnlFilterSelect.value !== "all" ? `-${pnlFilterSelect.value}-pnl` : "";
-    downloadBlob(toCSV(targetFills), `hyperliquid-statement${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
+    downloadBlob(toCSV(targetFills), `hyperliquid-statement-${walletEl.value.trim().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
   }
 });
 
 jsonBtn.addEventListener("click", () => {
   const targetFills = getFilteredFills();
   if (targetFills.length) {
-    const filterSuffix = pnlFilterSelect.value !== "all" ? `-${pnlFilterSelect.value}-pnl` : "";
     const mappedFills = targetFills.map(f => ({ ...f, sideFormatted: mapSide(f.side) }));
-    downloadBlob(JSON.stringify({ fills: mappedFills }, null, 2), `hyperliquid-statement${filterSuffix}-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
+    downloadBlob(JSON.stringify({ fills: mappedFills, fundingHistory }, null, 2), `hyperliquid-statement-${walletEl.value.trim().slice(0, 10)}.json`, "application/json");
   }
 });
 
-// PDF Generator with NET P&L and High-Contrast Light Colors
 function generatePDF() {
   const targetFills = getFilteredFills();
   if (!targetFills.length) return;
@@ -485,13 +590,19 @@ function generatePDF() {
     const doc = new jsPDF("landscape", "pt", "a4");
 
     const wallet = walletEl.value.trim();
-    const filterLabel = pnlFilterSelect.options[pnlFilterSelect.selectedIndex].text;
     const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
-    const totalFees = targetFills.reduce((s, f) => s + num(f.fee) + num(f.funding) + num(f.builderFee), 0);
+    
+    const tradingFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
+    const totalFundingPaid = fundingHistory.reduce((s, item) => {
+      const usdPayment = num(item.delta?.usdc);
+      return s + (usdPayment < 0 ? Math.abs(usdPayment) : 0);
+    }, 0);
+    const builderFees = targetFills.reduce((s, f) => s + num(f.builderFee), 0);
+    const totalFees = tradingFees + totalFundingPaid + builderFees;
+
     const netPnl = totalPnl - totalFees;
     const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
-    // Title Section
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
     doc.setTextColor(0, 184, 124);
@@ -500,16 +611,13 @@ function generatePDF() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
-    doc.text("OFFICIAL TRADE AUDIT STATEMENT", 40, 52);
+    doc.text("OFFICIAL INSTITUTIONAL TRADE AUDIT STATEMENT", 40, 52);
 
-    // Metadata
     doc.setFontSize(8);
     doc.setTextColor(60, 60, 60);
     doc.text(`Account: ${wallet}`, 802, 35, { align: "right" });
     doc.text(`Period: ${startEl.value} to ${endEl.value}`, 802, 47, { align: "right" });
-    doc.text(`Filter: ${filterLabel}`, 802, 59, { align: "right" });
 
-    // Summary Metric Cards (5 Cards including NET P&L)
     const cardWidth = 142;
     const cardGap = 13;
     let cardX = 40;
@@ -518,70 +626,48 @@ function generatePDF() {
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100);
     doc.text("NET P&L", cardX + 10, 82);
-    doc.setFontSize(10);
-    if (netPnl >= 0) doc.setTextColor(0, 150, 100);
-    else doc.setTextColor(220, 38, 38);
+    doc.setFontSize(10); doc.setTextColor(netPnl >= 0 ? 100 : 220, netPnl >= 0 ? 150 : 38, netPnl >= 0 ? 100 : 38);
     doc.text(money(netPnl, 2), cardX + 10, 100);
 
     // Card 2: CLOSED P&L
     cardX += cardWidth + cardGap;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100);
     doc.text("CLOSED P&L", cardX + 10, 82);
-    doc.setFontSize(10);
-    if (totalPnl >= 0) doc.setTextColor(0, 150, 100);
-    else doc.setTextColor(220, 38, 38);
+    doc.setFontSize(10); doc.setTextColor(totalPnl >= 0 ? 100 : 220, totalPnl >= 0 ? 150 : 38, totalPnl >= 0 ? 100 : 38);
     doc.text(money(totalPnl, 2), cardX + 10, 100);
 
     // Card 3: TOTAL FEES
     cardX += cardWidth + cardGap;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100);
     doc.text("TOTAL FEES", cardX + 10, 82);
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(10); doc.setTextColor(15, 23, 42);
     doc.text(plainMoney(totalFees, 2), cardX + 10, 100);
 
     // Card 4: TOTAL VOLUME
     cardX += cardWidth + cardGap;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100);
     doc.text("TOTAL VOLUME", cardX + 10, 82);
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(10); doc.setTextColor(15, 23, 42);
     doc.text(plainMoney(totalVol, 2), cardX + 10, 100);
 
     // Card 5: TOTAL TRADES
     cardX += cardWidth + cardGap;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
     doc.roundedRect(cardX, 70, cardWidth, 40, 3, 3, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100);
     doc.text("TOTAL TRADES", cardX + 10, 82);
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(10); doc.setTextColor(15, 23, 42);
     doc.text(targetFills.length.toLocaleString(), cardX + 10, 100);
 
-    // Data Mapping for Table
-    const tableHeaders = [["Date / Time", "Coin", "Dir", "Side", "Price", "Size", "Notional", "Closed P&L", "Fee"]];
+    const tableHeaders = [["Date / Time", "Coin", "Dir", "Side", "Price", "Size", "Closed P&L", "Trade Fee", "Funding", "Builder"]];
     const tableBody = targetFills.map(f => [
       formatDate(f.time),
       f.coin,
@@ -589,65 +675,34 @@ function generatePDF() {
       mapSide(f.side),
       f.px,
       f.sz,
-      plainMoney(Math.abs(num(f.px) * num(f.sz)), 2),
       money(num(f.closedPnl), 2),
-      plainMoney(f.fee, 2)
+      plainMoney(f.fee, 2),
+      plainMoney(f.funding, 2),
+      plainMoney(f.builderFee, 2)
     ]);
 
-    // High contrast light theme table options
     doc.autoTable({
       head: tableHeaders,
       body: tableBody,
       startY: 125,
       theme: "striped",
       margin: { top: 40, bottom: 40, left: 40, right: 40 },
-      styles: {
-        fontSize: 8,
-        cellPadding: 5,
-        overflow: "linebreak",
-        halign: "right",
-        textColor: [30, 41, 59],
-        fillColor: [255, 255, 255]
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252]
-      },
-      headStyles: {
-        fillColor: [226, 232, 240],
-        textColor: [15, 23, 42],
-        fontStyle: "bold",
-        halign: "right"
-      },
-      columnStyles: {
-        0: { halign: "left" },
-        1: { halign: "left", fontStyle: "bold", textColor: [15, 23, 42] }
-      },
-      didParseCell: function (data) {
-        if (data.section === "body" && data.column.index === 7) {
-          const rawText = data.cell.raw;
-          if (rawText.startsWith("+")) {
-            data.cell.styles.textColor = [0, 150, 100];
-            data.cell.styles.fontStyle = "bold";
-          } else if (rawText.startsWith("−") || rawText.startsWith("-")) {
-            data.cell.styles.textColor = [220, 38, 38];
-            data.cell.styles.fontStyle = "bold";
-          }
-        }
-      },
+      styles: { fontSize: 7.5, cellPadding: 4, halign: "right", textColor: [30, 41, 59], fillColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      headStyles: { fillColor: [226, 232, 240], textColor: [15, 23, 42], fontStyle: "bold", halign: "right" },
+      columnStyles: { 0: { halign: "left" }, 1: { halign: "left", fontStyle: "bold", textColor: [15, 23, 42] } },
       didDrawPage: function () {
         const str = `Page ${doc.internal.getNumberOfPages()}`;
-        doc.setFontSize(8);
-        doc.setTextColor(150);
+        doc.setFontSize(8); doc.setTextColor(150);
         doc.text("Hyperliquid On-Chain Statement", 40, doc.internal.pageSize.height - 20);
         doc.text(str, 802, doc.internal.pageSize.height - 20, { align: "right" });
       }
     });
 
-    doc.save(`statement-${wallet.slice(0, 8)}-${pnlFilterSelect.value}.pdf`);
-
+    doc.save(`statement-${wallet.slice(0, 8)}.pdf`);
   } catch (err) {
-    console.error("PDF Generation error:", err);
-    alert("Unable to compile PDF statement. Check console for technical details.");
+    console.error("PDF error:", err);
+    alert("Unable to compile PDF statement.");
   } finally {
     pdfBtn.disabled = false;
     pdfBtn.textContent = "PDF Statement";
@@ -666,10 +721,12 @@ $("clearBtn").addEventListener("click", () => {
   localStorage.removeItem(SAVED_WALLET_KEY);
   setPreset("30");
   fills = [];
+  fundingHistory = [];
   pnlFilterSelect.value = "all";
+  coinFilterSelect.innerHTML = '<option value="all">All Coins</option>';
   clearStatus();
   noticeEl.classList.add("hidden");
-  bodyEl.innerHTML = '<tr class="empty-row"><td colspan="13">Enter a valid wallet address to display trade history.</td></tr>';
+  bodyEl.innerHTML = '<tr class="empty-row"><td colspan="14">Enter a valid wallet address to display trade history.</td></tr>';
   monthlyBodyEl.innerHTML = '<tr class="empty-row"><td colspan="6">Enter a valid wallet address to view monthly breakdown.</td></tr>';
   tableMeta.textContent = "No data loaded.";
   monthlyMeta.textContent = "No data loaded.";
