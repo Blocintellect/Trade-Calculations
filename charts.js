@@ -75,7 +75,6 @@ async function fetchAllData(user) {
 
   out.sort((a, b) => Number(a.time) - Number(b.time)); // Chronological
 
-  // Fetch funding history as well for exact net tracking
   let funding = [];
   try {
     const fundData = await postInfo({
@@ -138,7 +137,6 @@ function processAndRenderAnalytics(fills, funding) {
     if (num(f.closedPnl) < 0) dailyMap[dateKey].losses += 1;
   });
 
-  // Factor in funding payments by date
   funding.forEach(item => {
     const timeVal = item.time || item.delta?.time;
     if (!timeVal) return;
@@ -150,9 +148,9 @@ function processAndRenderAnalytics(fills, funding) {
       dailyMap[dateKey] = { netPnl: 0, wins: 0, losses: 0, totalTrades: 0 };
     }
     if (usdPayment < 0) {
-      dailyMap[dateKey].netPnl -= Math.abs(usdPayment); // subtract paid funding
+      dailyMap[dateKey].netPnl -= Math.abs(usdPayment);
     } else {
-      dailyMap[dateKey].netPnl += usdPayment; // add received funding
+      dailyMap[dateKey].netPnl += usdPayment;
     }
   });
 
@@ -181,7 +179,6 @@ function processAndRenderAnalytics(fills, funding) {
     totalLosses += dayObj.losses;
   });
 
-  // Update Summary Statistic Cards
   const avgTradeExpectancy = fills.length > 0 ? cumulativePnl / fills.length : 0;
   const winLossRatio = totalLosses > 0 ? (totalWins / totalLosses).toFixed(2) : totalWins > 0 ? "∞" : "0.00";
 
@@ -191,7 +188,6 @@ function processAndRenderAnalytics(fills, funding) {
   $("statAvgTrade").textContent = money(avgTradeExpectancy, 2);
   $("statDays").textContent = dates.length.toLocaleString();
 
-  // Render Chart.js Progress Line Chart
   if (pnlChartInstance) pnlChartInstance.destroy();
 
   const ctxPnl = $("pnlLineChart").getContext("2d");
@@ -228,7 +224,12 @@ function processAndRenderAnalytics(fills, funding) {
       },
       scales: {
         x: {
-          ticks: { color: chartTextColor, maxTicksLimit: 10 },
+          ticks: {
+            color: chartTextColor,
+            maxTicksLimit: 6,
+            maxRotation: 45,
+            minRotation: 0
+          },
           grid: { color: 'rgba(255,255,255,0.04)' }
         },
         y: {
