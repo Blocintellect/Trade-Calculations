@@ -41,7 +41,6 @@ let fundingHistory = [];
 let currentPage = 1;
 const rowsPerPage = 50;
 
-// Local Storage Keys
 const SAVED_WALLET_KEY = "hyperliquid_saved_wallet";
 const SAVED_THEME_KEY = "hyperliquid_theme";
 const CACHE_FILLS_KEY = "hyperliquid_persisted_fills";
@@ -56,12 +55,10 @@ walletEl.addEventListener("input", () => {
   localStorage.setItem(SAVED_WALLET_KEY, walletEl.value.trim());
 });
 
-// Modal Logic
 feeCard.addEventListener("click", () => feeModal.classList.remove("hidden"));
 closeModalBtn.addEventListener("click", () => feeModal.classList.add("hidden"));
 window.addEventListener("click", e => { if (e.target === feeModal) feeModal.classList.add("hidden"); });
 
-// Tab Switching Logic
 tabTradesBtn.addEventListener("click", () => {
   tabTradesBtn.classList.add("active");
   tabMonthlyBtn.classList.remove("active");
@@ -85,7 +82,6 @@ function mapSide(side) {
   return side;
 }
 
-// Theme Management
 function initTheme() {
   const currentTheme = localStorage.getItem(SAVED_THEME_KEY) || "dark";
   applyTheme(currentTheme);
@@ -272,7 +268,7 @@ function setMetric(id, value, s = null) {
 }
 
 function resetMetrics() {
-  ["mFills", "mPnl", "mFees", "mNet", "mWinRate", "mProfitFactor"].forEach(id => {
+  ["mFills", "mPnl", "mFees", "mNet", "mWinRate"].forEach(id => {
     setMetric(id, "—");
   });
   csvBtn.disabled = true;
@@ -284,13 +280,20 @@ function resetMetrics() {
 function updateMetrics() {
   const closedPnl = fills.reduce((s, f) => s + num(f.closedPnl), 0);
   const tradingFees = fills.reduce((s, f) => s + num(f.fee), 0);
-  const totalFundingPaid = fundingHistory.reduce((s, item) => {
-    const usdPayment = num(item.delta?.usdc);
-    return s + (usdPayment < 0 ? Math.abs(usdPayment) : 0);
-  }, 0);
   const builderFees = fills.reduce((s, f) => s + num(f.builderFee), 0);
+  
+  let netFundingUsd = 0;
+  let totalFundingPaid = 0;
+  fundingHistory.forEach(item => {
+    const usdPayment = num(item.delta?.usdc);
+    netFundingUsd += usdPayment;
+    if (usdPayment < 0) {
+      totalFundingPaid += Math.abs(usdPayment);
+    }
+  });
+
   const totalFees = tradingFees + totalFundingPaid + builderFees;
-  const netPnl = closedPnl - totalFees;
+  const netPnl = closedPnl - tradingFees - builderFees + netFundingUsd;
 
   $("modalTradingFee").textContent = plainMoney(tradingFees, 4);
   $("modalFundingFee").textContent = plainMoney(totalFundingPaid, 4);
@@ -299,17 +302,13 @@ function updateMetrics() {
 
   const tradesWithPnl = fills.filter(f => num(f.closedPnl) !== 0);
   const winningTrades = tradesWithPnl.filter(f => num(f.closedPnl) > 0);
-  const losingTrades = tradesWithPnl.filter(f => num(f.closedPnl) < 0);
   const winRate = tradesWithPnl.length > 0 ? (winningTrades.length / tradesWithPnl.length) * 100 : 0;
-  const grossProfit = winningTrades.reduce((s, f) => s + num(f.closedPnl), 0);
-  const grossLoss = Math.abs(losingTrades.reduce((s, f) => s + num(f.closedPnl), 0));
-  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99.9 : 0;
 
+  setMetric("mFills", fills.length.toLocaleString());
   setMetric("mPnl", money(closedPnl, 2), closedPnl);
   setMetric("mFees", plainMoney(totalFees, 2));
   setMetric("mNet", money(netPnl, 2), netPnl);
   setMetric("mWinRate", winRate.toFixed(1) + "%", winRate > 50 ? 1 : winRate < 50 ? -1 : 0);
-  setMetric("mProfitFactor", profitFactor === 99.9 ? "∞" : profitFactor.toFixed(2), profitFactor > 1 ? 1 : profitFactor < 1 ? -1 : 0);
 }
 
 function updateCoinFilterOptions() {
@@ -347,11 +346,16 @@ function renderMonthlyPnl() {
     const label = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
     if (!monthlyMap[yearMonthKey]) {
-      monthlyMap[yearMonthKey] = { label, closedPnl: 0, fees: 0, volume: 0, fillsCount: 0 };
+      monthlyMap[yearMonthKey] = { label, closedPnl: 0, fees: 0, netPnl: 0, volume: 0, fillsCount: 0 };
     }
 
-    monthlyMap[yearMonthKey].closedPnl += num(f.closedPnl);
-    monthlyMap[yearMonthKey].fees += num(f.fee) + num(f.builderFee);
+    const closedPnl = num(f.closedPnl);
+    const tradingFee = num(f.fee);
+    const builderFee = num(f.builderFee);
+
+    monthlyMap[yearMonthKey].closedPnl += closedPnl;
+    monthlyMap[yearMonthKey].fees += (tradingFee + builderFee);
+    monthlyMap[yearMonthKey].netPnl += (closedPnl - tradingFee - builderFee);
     monthlyMap[yearMonthKey].volume += Math.abs(num(f.px) * num(f.sz));
     monthlyMap[yearMonthKey].fillsCount += 1;
   });
@@ -364,23 +368,28 @@ function renderMonthlyPnl() {
     const label = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
     if (!monthlyMap[yearMonthKey]) {
-      monthlyMap[yearMonthKey] = { label, closedPnl: 0, fees: 0, volume: 0, fillsCount: 0 };
+      monthlyMap[yearMonthKey] = { label, closedPnl: 0, fees: 0, netPnl: 0, volume: 0, fillsCount: 0 };
     }
 
     const usdPayment = num(item.delta?.usdc);
-    if (usdPayment < 0) monthlyMap[yearMonthKey].fees += Math.abs(usdPayment);
+    if (usdPayment < 0) {
+      const paid = Math.abs(usdPayment);
+      monthlyMap[yearMonthKey].fees += paid;
+      monthlyMap[yearMonthKey].netPnl -= paid;
+    } else {
+      monthlyMap[yearMonthKey].netPnl += usdPayment;
+    }
   });
 
   const sortedKeys = Object.keys(monthlyMap).sort().reverse();
 
   monthlyBodyEl.innerHTML = sortedKeys.map(k => {
     const m = monthlyMap[k];
-    const net = m.closedPnl - m.fees;
     return `<tr>
       <td style="text-align: left; font-weight: 800;">${esc(m.label)}</td>
       <td class="${m.closedPnl > 0 ? "text-positive" : m.closedPnl < 0 ? "text-negative" : ""}">${money(m.closedPnl, 2)}</td>
       <td>${plainMoney(m.fees, 2)}</td>
-      <td class="${net > 0 ? "text-positive" : net < 0 ? "text-negative" : ""}">${money(net, 2)}</td>
+      <td class="${m.netPnl > 0 ? "text-positive" : m.netPnl < 0 ? "text-negative" : ""}">${money(m.netPnl, 2)}</td>
       <td>${plainMoney(m.volume, 2)}</td>
       <td>${m.fillsCount.toLocaleString()}</td>
     </tr>`;
@@ -393,7 +402,7 @@ function renderTrades() {
   const displayFills = getFilteredFills();
 
   if (!displayFills.length) {
-    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="14">No trade fills found matching selected criteria.</td></tr>';
+    bodyEl.innerHTML = '<tr class="empty-row"><td colspan="12">No trade fills found matching selected criteria.</td></tr>';
     tableMeta.textContent = "No trade fills to show.";
     paginationContainer.classList.add("hidden");
     return;
@@ -425,8 +434,6 @@ function renderTrades() {
       <td>${plainMoney(Math.abs(num(f.px) * num(f.sz)), 2)}</td>
       <td class="${p > 0 ? "text-positive" : p < 0 ? "text-negative" : ""}">${money(p, 4)}</td>
       <td>${plainMoney(f.fee, 4)}</td>
-      <td>${plainMoney(f.funding, 4)}</td>
-      <td>${plainMoney(f.builderFee, 4)}</td>
       <td>${esc(f.feeToken)}</td>
       <td>${esc(f.oid)}</td>
       <td>${hashCell}</td>
@@ -448,10 +455,9 @@ function renderTrades() {
   renderMonthlyPnl();
 }
 
-// Auto-load persisted data on start with 2-hour expiration wipe check
 window.addEventListener("DOMContentLoaded", () => {
   const cacheTime = Number(localStorage.getItem(CACHE_TIME_KEY) || 0);
-  const isExpired = (Date.now() - cacheTime) > 7200000; // 2 hours expiration
+  const isExpired = (Date.now() - cacheTime) > 7200000;
 
   if (isExpired) {
     localStorage.removeItem(CACHE_FILLS_KEY);
@@ -521,7 +527,6 @@ fetchBtn.addEventListener("click", async () => {
     fills = accountData.fills;
     fundingHistory = accountData.funding;
 
-    // Save with timestamp for 2-hour expiration wipe policy
     localStorage.setItem(CACHE_FILLS_KEY, JSON.stringify(fills));
     localStorage.setItem(CACHE_FUNDING_KEY, JSON.stringify(fundingHistory));
     localStorage.setItem(CACHE_TIME_KEY, Date.now());
@@ -546,11 +551,9 @@ fetchBtn.addEventListener("click", async () => {
   }
 });
 
-// Background 1-hour silent auto-refresh timer
 setInterval(async () => {
   const wallet = walletEl.value.trim();
   if (isAddress(wallet) && !fetchBtn.disabled) {
-    console.log("Running scheduled 1-hour background data refresh...");
     try {
       const s = msStart(startEl.value), e = msEnd(endEl.value);
       const accountData = await fetchAccountData(wallet, s, e);
@@ -566,8 +569,6 @@ setInterval(async () => {
 
       updateCoinFilterOptions();
       renderTrades();
-      
-      setStatus(`Auto-refreshed: Loaded ${fills.length.toLocaleString()} fill(s) at ${new Date().toLocaleTimeString()}`, "success");
     } catch (err) {
       console.warn("Background auto-refresh failed:", err);
     }
@@ -591,8 +592,6 @@ function toCSV(rows) {
     ["Notional USD", f => Math.abs(num(f.px) * num(f.sz)).toFixed(8)],
     ["Closed P&L", f => f.closedPnl],
     ["Trading Fee", f => f.fee],
-    ["Funding Fee", f => f.funding],
-    ["Builder Fee", f => f.builderFee],
     ["Fee Token", f => f.feeToken],
     ["Order ID", f => f.oid],
     ["Hash", f => f.hash]
@@ -646,13 +645,18 @@ function generatePDF() {
     const wallet = walletEl.value.trim();
     const totalPnl = targetFills.reduce((s, f) => s + num(f.closedPnl), 0);
     const tradingFees = targetFills.reduce((s, f) => s + num(f.fee), 0);
-    const totalFundingPaid = fundingHistory.reduce((s, item) => {
-      const usdPayment = num(item.delta?.usdc);
-      return s + (usdPayment < 0 ? Math.abs(usdPayment) : 0);
-    }, 0);
     const builderFees = targetFills.reduce((s, f) => s + num(f.builderFee), 0);
+    
+    let netFundingUsd = 0;
+    let totalFundingPaid = 0;
+    fundingHistory.forEach(item => {
+      const usdPayment = num(item.delta?.usdc);
+      netFundingUsd += usdPayment;
+      if (usdPayment < 0) totalFundingPaid += Math.abs(usdPayment);
+    });
+
     const totalFees = tradingFees + totalFundingPaid + builderFees;
-    const netPnl = totalPnl - totalFees;
+    const netPnl = totalPnl - tradingFees - builderFees + netFundingUsd;
     const totalVol = targetFills.reduce((s, f) => s + Math.abs(num(f.px) * num(f.sz)), 0);
 
     doc.setFont("helvetica", "bold");
@@ -713,7 +717,7 @@ function generatePDF() {
     doc.setFontSize(10); doc.setTextColor(15, 23, 42);
     doc.text(targetFills.length.toLocaleString(), cardX + 10, 100);
 
-    const tableHeaders = [["Date / Time", "Coin", "Dir", "Side", "Price", "Size", "Closed P&L", "Trade Fee", "Funding", "Builder"]];
+    const tableHeaders = [["Date / Time", "Coin", "Dir", "Side", "Price", "Size", "Closed P&L", "Trade Fee"]];
     const tableBody = targetFills.map(f => [
       formatDate(f.time),
       f.coin,
@@ -722,9 +726,7 @@ function generatePDF() {
       f.px,
       f.sz,
       money(num(f.closedPnl), 2),
-      plainMoney(f.fee, 2),
-      plainMoney(f.funding, 2),
-      plainMoney(f.builderFee, 2)
+      plainMoney(f.fee, 2)
     ]);
 
     doc.autoTable({
@@ -776,7 +778,7 @@ $("clearBtn").addEventListener("click", () => {
   coinFilterSelect.innerHTML = '<option value="all">All Coins</option>';
   clearStatus();
   noticeEl.classList.add("hidden");
-  bodyEl.innerHTML = '<tr class="empty-row"><td colspan="14">Enter a valid wallet address to display trade history.</td></tr>';
+  bodyEl.innerHTML = '<tr class="empty-row"><td colspan="12">Enter a valid wallet address to display trade history.</td></tr>';
   monthlyBodyEl.innerHTML = '<tr class="empty-row"><td colspan="6">Enter a valid wallet address to view monthly breakdown.</td></tr>';
   tableMeta.textContent = "No data loaded.";
   monthlyMeta.textContent = "No data loaded.";
